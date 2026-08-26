@@ -13,7 +13,86 @@ struct HTTPTransport: Sendable {
         options: RequestOptions
     ) async throws -> Response {
         try await withRetries(options: options) {
-            try await performRequest(method: method, path: path, body: body, options: options)
+            try await performRequest(
+                method: method, path: path, httpBody: try Self.encoder.encode(body),
+                contentType: nil, options: options
+            )
+        }
+    }
+
+    /// GET (or any body-less method) with optional query parameters, for the id-cursor/token-cursor
+    /// list endpoints and simple retrieve-by-id endpoints. A `nil` query value omits that parameter
+    /// entirely, matching the reference SDKs treating unset params as absent rather than `"nil"`.
+    /// `arrayQuery` covers list-valued params (e.g. `Files.list`'s `ids`); the reference SDKs
+    /// configure their querystring serializer with `array_format="brackets"`, i.e. `ids[]=a&ids[]=b`.
+    func get<Response: Decodable>(
+        path: String,
+        query: [String: String?] = [:],
+        arrayQuery: [String: [String]?] = [:],
+        options: RequestOptions
+    ) async throws -> Response {
+        try await withRetries(options: options) {
+            try await performRequest(
+                method: "GET", path: path, query: query, arrayQuery: arrayQuery, httpBody: nil,
+                contentType: nil, options: options
+            )
+        }
+    }
+
+    /// POST with an empty `{}` body, for parameter-less action endpoints like
+    /// `MessageBatches.cancel` that are semantically actions rather than a plain GET.
+    func post<Response: Decodable>(
+        path: String,
+        options: RequestOptions
+    ) async throws -> Response {
+        try await withRetries(options: options) {
+            try await performRequest(
+                method: "POST", path: path, httpBody: Data("{}".utf8), contentType: nil, options: options
+            )
+        }
+    }
+
+    /// DELETE with no body, for the various `*_deleted` endpoints.
+    func delete<Response: Decodable>(
+        path: String,
+        options: RequestOptions
+    ) async throws -> Response {
+        try await withRetries(options: options) {
+            try await performRequest(
+                method: "DELETE", path: path, httpBody: nil, contentType: nil, options: options
+            )
+        }
+    }
+
+    /// GET returning the raw response bytes rather than a JSON-decoded type, for `Files.download`
+    /// and `MessageBatches.results` (a `.jsonl` stream the caller splits and decodes line-by-line).
+    /// `path` may be a path relative to `client.baseURL` or an absolute URL string -- `results_url`
+    /// on a `MessageBatch` is already a full URL returned by the server.
+    func getData(
+        path: String,
+        query: [String: String?] = [:],
+        accept: String? = nil,
+        options: RequestOptions
+    ) async throws -> Data {
+        try await withRetries(options: options) {
+            try await performRawRequest(
+                method: "GET", path: path, query: query, accept: accept, options: options
+            )
+        }
+    }
+
+    /// POST with a `multipart/form-data` body, for the three upload endpoints (`Files.upload`,
+    /// `Skills.create`, `Skills.Versions.create`).
+    func postMultipart<Response: Decodable>(
+        path: String,
+        multipart: MultipartFormData,
+        options: RequestOptions
+    ) async throws -> Response {
+        try await withRetries(options: options) {
+            try await performRequest(
+                method: "POST", path: path, httpBody: multipart.encode(),
+                contentType: multipart.contentType, options: options
+            )
         }
     }
 
@@ -54,10 +133,18 @@ struct HTTPTransport: Sendable {
     private func buildRequest(
         method: String,
         path: String,
-        httpBody: Data,
+        query: [String: String?] = [:],
+        arrayQuery: [String: [String]?] = [:],
+        httpBody: Data?,
+        contentType: String?,
+        accept: String? = nil,
         options: RequestOptions
     ) async throws -> URLRequest {
-        var request = URLRequest(url: client.baseURL.appendingPathComponent(path))
+        var request = URLRequest(
+            url: Self.applying(
+                query: query, arrayQuery: arrayQuery, to: Self.resolvedURL(path, baseURL: client.baseURL)
+            )
+        )
         request.httpMethod = method
         request.httpBody = httpBody
         request.timeoutInterval = options.timeout ?? client.timeout
@@ -65,6 +152,12 @@ struct HTTPTransport: Sendable {
         var headers = client.defaultHeaders
         let (headerName, headerValue) = try await client.authProvider.authHeader()
         headers[headerName] = headerValue
+        if let contentType {
+            headers["content-type"] = contentType
+        }
+        if let accept {
+            headers["accept"] = accept
+        }
         for (key, value) in options.headers {
             if let value {
                 headers[key] = value
@@ -78,14 +171,59 @@ struct HTTPTransport: Sendable {
         return request
     }
 
-    private func performRequest<Body: Encodable, Response: Decodable>(
+    /// `MessageBatch.resultsURL` is already a full URL returned by the server, unlike every other
+    /// `path` this transport is called with -- treat any string with a scheme as absolute rather
+    /// than re-resolving it against `baseURL`.
+    private static func resolvedURL(_ path: String, baseURL: URL) -> URL {
+        if let url = URL(string: path), url.scheme != nil {
+            return url
+        }
+        return baseURL.appendingPathComponent(path)
+    }
+
+    private static func applying(
+        query: [String: String?], arrayQuery: [String: [String]?] = [:], to url: URL
+    ) -> URL {
+        var queryItems = query.compactMap { key, value in value.map { URLQueryItem(name: key, value: $0) } }
+        for (key, values) in arrayQuery {
+            guard let values else { continue }
+            queryItems.append(contentsOf: values.map { URLQueryItem(name: "\(key)[]", value: $0) })
+        }
+        guard !queryItems.isEmpty else { return url }
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return url }
+        components.queryItems = (components.queryItems ?? []) + queryItems
+        return components.url ?? url
+    }
+
+    private func performRequest<Response: Decodable>(
         method: String,
         path: String,
-        body: Body,
+        query: [String: String?] = [:],
+        arrayQuery: [String: [String]?] = [:],
+        httpBody: Data?,
+        contentType: String?,
         options: RequestOptions
     ) async throws -> Response {
+        let data = try await performRawRequest(
+            method: method, path: path, query: query, arrayQuery: arrayQuery, httpBody: httpBody,
+            contentType: contentType, options: options
+        )
+        return try Self.decoder.decode(Response.self, from: data)
+    }
+
+    private func performRawRequest(
+        method: String,
+        path: String,
+        query: [String: String?] = [:],
+        arrayQuery: [String: [String]?] = [:],
+        httpBody: Data? = nil,
+        contentType: String? = nil,
+        accept: String? = nil,
+        options: RequestOptions
+    ) async throws -> Data {
         let request = try await buildRequest(
-            method: method, path: path, httpBody: try Self.encoder.encode(body), options: options
+            method: method, path: path, query: query, arrayQuery: arrayQuery, httpBody: httpBody,
+            contentType: contentType, accept: accept, options: options
         )
 
         let data: Data
@@ -105,7 +243,7 @@ struct HTTPTransport: Sendable {
             let errorBody = try? Self.decoder.decode(JSONValue.self, from: data)
             throw AnthropicError.from(response: http, body: errorBody)
         }
-        return try Self.decoder.decode(Response.self, from: data)
+        return data
     }
 
     private func performStreamingRequest(
@@ -114,7 +252,9 @@ struct HTTPTransport: Sendable {
         body: Data,
         options: RequestOptions
     ) async throws -> (response: HTTPURLResponse, sse: AsyncThrowingStream<ServerSentEvent, Error>) {
-        let request = try await buildRequest(method: method, path: path, httpBody: body, options: options)
+        let request = try await buildRequest(
+            method: method, path: path, httpBody: body, contentType: nil, options: options
+        )
 
         let bytes: URLSession.AsyncBytes
         let response: URLResponse

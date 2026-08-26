@@ -57,6 +57,9 @@ public final class AnthropicClient: Sendable {
     var transport: HTTPTransport { HTTPTransport(client: self) }
 
     public var messages: Messages { Messages(client: self) }
+    public var models: Models { Models(client: self) }
+    public var files: Files { Files(client: self) }
+    public var skills: Skills { Skills(client: self) }
 
     /// Returns a new client that layers these overrides on top of the current defaults for every
     /// subsequent call. A `nil` header value unsets a default header rather than being ignored.
