@@ -1,0 +1,51 @@
+public enum ToolUnionParam: Sendable, Equatable {
+    case custom(ToolParam)
+    case bash20250124(ToolBash20250124Param)
+    case codeExecution20250522(CodeExecutionTool20250522Param)
+    case codeExecution20250825(CodeExecutionTool20250825Param)
+    case codeExecution20260120(CodeExecutionTool20260120Param)
+    case codeExecution20260521(CodeExecutionTool20260521Param)
+    case browserToolset20260801(BrowserToolset20260801Param)
+    case memory20250818(MemoryTool20250818Param)
+    case computerToolset20260801(ComputerToolset20260801Param)
+    case textEditor20250124(ToolTextEditor20250124Param)
+    case textEditor20250429(ToolTextEditor20250429Param)
+    case textEditor20250728(ToolTextEditor20250728Param)
+    case webSearch20250305(WebSearchTool20250305Param)
+    case webFetch20250910(WebFetchTool20250910Param)
+    case webSearch20260209(WebSearchTool20260209Param)
+    case webFetch20260209(WebFetchTool20260209Param)
+    case webFetch20260309(WebFetchTool20260309Param)
+    case webSearch20260318(WebSearchTool20260318Param)
+    case webFetch20260318(WebFetchTool20260318Param)
+    case toolSearchBm25_20251119(ToolSearchToolBm25_20251119Param)
+    case toolSearchRegex20251119(ToolSearchToolRegex20251119Param)
+}
+
+extension ToolUnionParam: Encodable {
+    public func encode(to encoder: Encoder) throws {
+        switch self {
+        case .custom(let value): try value.encode(to: encoder)
+        case .bash20250124(let value): try value.encode(to: encoder)
+        case .codeExecution20250522(let value): try value.encode(to: encoder)
+        case .codeExecution20250825(let value): try value.encode(to: encoder)
+        case .codeExecution20260120(let value): try value.encode(to: encoder)
+        case .codeExecution20260521(let value): try value.encode(to: encoder)
+        case .browserToolset20260801(let value): try value.encode(to: encoder)
+        case .memory20250818(let value): try value.encode(to: encoder)
+        case .computerToolset20260801(let value): try value.encode(to: encoder)
+        case .textEditor20250124(let value): try value.encode(to: encoder)
+        case .textEditor20250429(let value): try value.encode(to: encoder)
+        case .textEditor20250728(let value): try value.encode(to: encoder)
+        case .webSearch20250305(let value): try value.encode(to: encoder)
+        case .webFetch20250910(let value): try value.encode(to: encoder)
+        case .webSearch20260209(let value): try value.encode(to: encoder)
+        case .webFetch20260209(let value): try value.encode(to: encoder)
+        case .webFetch20260309(let value): try value.encode(to: encoder)
+        case .webSearch20260318(let value): try value.encode(to: encoder)
+        case .webFetch20260318(let value): try value.encode(to: encoder)
+        case .toolSearchBm25_20251119(let value): try value.encode(to: encoder)
+        case .toolSearchRegex20251119(let value): try value.encode(to: encoder)
+        }
+    }
+}
