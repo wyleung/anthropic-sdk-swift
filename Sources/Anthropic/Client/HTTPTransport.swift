@@ -152,6 +152,9 @@ struct HTTPTransport: Sendable {
         var headers = client.defaultHeaders
         let (headerName, headerValue) = try await client.authProvider.authHeader()
         headers[headerName] = headerValue
+        for (key, value) in try await client.authProvider.extraHeaders() {
+            headers[key] = value
+        }
         if let contentType {
             headers["content-type"] = contentType
         }

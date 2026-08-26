@@ -12,8 +12,13 @@ public final class AnthropicClient: Sendable {
     let authProvider: any CredentialProvider
 
     /// - Parameters:
-    ///   - apiKey: Falls back to the `ANTHROPIC_API_KEY` environment variable when omitted.
+    ///   - apiKey: Falls back to the `ANTHROPIC_API_KEY`, then `ANTHROPIC_AUTH_TOKEN`, environment
+    ///     variables when omitted.
     ///   - authProvider: Supply this instead of `apiKey` for non-API-key auth (added in Phase 5).
+    ///
+    /// This initializer never touches disk and never throws -- it only covers the two simplest
+    /// credential sources (an explicit value, or one of two environment variables). For on-disk
+    /// profiles or Workload Identity Federation, use ``resolvingCredentials(apiKey:authProvider:profile:baseURL:maxRetries:timeout:urlSession:identityTokenSource:)``.
     public init(
         apiKey: String? = nil,
         authProvider: (any CredentialProvider)? = nil,
@@ -22,21 +27,63 @@ public final class AnthropicClient: Sendable {
         timeout: TimeInterval = 600,
         urlSession: URLSession = .shared
     ) {
-        let resolvedKey = apiKey ?? ProcessInfo.processInfo.environment["ANTHROPIC_API_KEY"]
+        let environment = ProcessInfo.processInfo.environment
+        let resolvedKey = apiKey ?? environment["ANTHROPIC_API_KEY"]
+        let resolvedAuthToken = environment["ANTHROPIC_AUTH_TOKEN"]
         precondition(
-            authProvider != nil || resolvedKey != nil,
-            "AnthropicClient needs an apiKey, an authProvider, or an ANTHROPIC_API_KEY environment variable."
+            authProvider != nil || resolvedKey != nil || resolvedAuthToken != nil,
+            "AnthropicClient needs an apiKey, an authProvider, an ANTHROPIC_API_KEY environment " +
+                "variable, or an ANTHROPIC_AUTH_TOKEN environment variable."
         )
         self.baseURL = baseURL
-        self.defaultHeaders = [
-            "anthropic-version": AnthropicClient.defaultAnthropicVersion,
-            "content-type": "application/json",
-        ]
+        self.defaultHeaders = AnthropicClient.baseDefaultHeaders
         self.maxRetries = maxRetries
         self.timeout = timeout
         self.urlSession = urlSession
-        self.authProvider = authProvider ?? APIKeyProvider(apiKey: resolvedKey!)
+        if let authProvider {
+            self.authProvider = authProvider
+        } else if let resolvedKey {
+            self.authProvider = APIKeyProvider(apiKey: resolvedKey)
+        } else {
+            self.authProvider = StaticTokenProvider(token: resolvedAuthToken!)
+        }
     }
+
+    /// Resolves credentials through the full precedence chain (explicit params, env vars, on-disk
+    /// profiles, Workload Identity Federation) -- see `CredentialChain.resolve` for the exact order.
+    /// Unlike the plain initializer, this can perform file I/O and network calls (a WIF token
+    /// exchange, or a `user_oauth` refresh) and so can throw.
+    public static func resolvingCredentials(
+        apiKey: String? = nil,
+        authProvider: (any CredentialProvider)? = nil,
+        profile: String? = nil,
+        baseURL: URL? = nil,
+        maxRetries: Int = 2,
+        timeout: TimeInterval = 600,
+        urlSession: URLSession = .shared,
+        identityTokenSource: (any IdentityTokenSource)? = nil
+    ) async throws -> AnthropicClient {
+        let environment = ProcessInfo.processInfo.environment
+        let resolution = try await CredentialChain.resolve(
+            apiKey: apiKey, authProvider: authProvider, profile: profile, baseURL: baseURL,
+            environment: environment, urlSession: urlSession, identityTokenSource: identityTokenSource
+        )
+        let envBaseURL = environment["ANTHROPIC_BASE_URL"].flatMap { URL(string: $0) }
+        let resolvedBaseURL = baseURL ?? envBaseURL ?? resolution.baseURL ?? AnthropicClient.defaultBaseURL
+        return AnthropicClient(
+            baseURL: resolvedBaseURL,
+            defaultHeaders: AnthropicClient.baseDefaultHeaders,
+            maxRetries: maxRetries,
+            timeout: timeout,
+            urlSession: urlSession,
+            authProvider: resolution.provider
+        )
+    }
+
+    private static let baseDefaultHeaders: [String: String] = [
+        "anthropic-version": AnthropicClient.defaultAnthropicVersion,
+        "content-type": "application/json",
+    ]
 
     private init(
         baseURL: URL,
