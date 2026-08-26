@@ -5,7 +5,7 @@ import Anthropic
 /// `ServiceTier`, and `SystemPromptParam` directly -- all confirmed field-identical to their Beta
 /// counterparts. `contextManagement`, `diagnostics`, `fallbackCreditToken`, and `fallbacks` are kept
 /// as raw `JSONValue` passthroughs rather than fully typed (each is a deeply-nested union in the
-/// Python source). `mcpServers` is omitted entirely for this slice.
+/// Python source).
 public struct BetaMessageCreateParams: Encodable, Sendable, Equatable {
     public let model: String
     public let maxTokens: Int
@@ -17,6 +17,7 @@ public struct BetaMessageCreateParams: Encodable, Sendable, Equatable {
     public let fallbackCreditToken: String?
     public let fallbacks: JSONValue?
     public let inferenceGeo: String?
+    public let mcpServers: [BetaRequestMCPServerURLDefinitionParam]?
     public let metadata: MetadataParam?
     public let outputConfig: BetaOutputConfigParam?
     public let serviceTier: ServiceTier?
@@ -38,6 +39,7 @@ public struct BetaMessageCreateParams: Encodable, Sendable, Equatable {
         fallbackCreditToken: String? = nil,
         fallbacks: JSONValue? = nil,
         inferenceGeo: String? = nil,
+        mcpServers: [BetaRequestMCPServerURLDefinitionParam]? = nil,
         metadata: MetadataParam? = nil,
         outputConfig: BetaOutputConfigParam? = nil,
         serviceTier: ServiceTier? = nil,
@@ -58,6 +60,7 @@ public struct BetaMessageCreateParams: Encodable, Sendable, Equatable {
         self.fallbackCreditToken = fallbackCreditToken
         self.fallbacks = fallbacks
         self.inferenceGeo = inferenceGeo
+        self.mcpServers = mcpServers
         self.metadata = metadata
         self.outputConfig = outputConfig
         self.serviceTier = serviceTier
