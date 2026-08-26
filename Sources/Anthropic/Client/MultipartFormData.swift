@@ -4,13 +4,15 @@ import Foundation
 /// (`Files.upload`, `Skills.create`, `Skills.Versions.create`) that the reference SDKs send via
 /// their HTTP library's multipart helpers -- Swift has no such helper on `URLSession`, so this
 /// builds the boundary-delimited body by hand.
-struct MultipartFormData {
+package struct MultipartFormData {
     private let boundary = "AnthropicSwiftBoundary-\(UUID().uuidString)"
     private var parts: [Data] = []
 
+    package init() {}
+
     var contentType: String { "multipart/form-data; boundary=\(boundary)" }
 
-    mutating func addField(name: String, value: String) {
+    package mutating func addField(name: String, value: String) {
         var part = Data()
         part.append(contentsOf: "--\(boundary)\r\n".utf8)
         part.append(contentsOf: "Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n".utf8)
@@ -19,7 +21,7 @@ struct MultipartFormData {
         parts.append(part)
     }
 
-    mutating func addFile(name: String, filename: String, contentType: String, data: Data) {
+    package mutating func addFile(name: String, filename: String, contentType: String, data: Data) {
         var part = Data()
         part.append(contentsOf: "--\(boundary)\r\n".utf8)
         part.append(

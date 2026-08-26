@@ -101,7 +101,7 @@ public final class AnthropicClient: Sendable {
         self.authProvider = authProvider
     }
 
-    var transport: HTTPTransport { HTTPTransport(client: self) }
+    package var transport: HTTPTransport { HTTPTransport(client: self) }
 
     public var messages: Messages { Messages(client: self) }
     public var models: Models { Models(client: self) }

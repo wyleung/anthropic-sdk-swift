@@ -1,20 +1,21 @@
 import Foundation
 
-struct HTTPTransport: Sendable {
+package struct HTTPTransport: Sendable {
     private static let initialRetryDelay: TimeInterval = 0.5
     private static let maxRetryDelay: TimeInterval = 8.0
 
     let client: AnthropicClient
 
-    func send<Body: Encodable, Response: Decodable>(
+    package func send<Body: Encodable, Response: Decodable>(
         method: String,
         path: String,
+        query: [String: String?] = [:],
         body: Body,
         options: RequestOptions
     ) async throws -> Response {
         try await withRetries(options: options) {
             try await performRequest(
-                method: method, path: path, httpBody: try Self.encoder.encode(body),
+                method: method, path: path, query: query, httpBody: try Self.encoder.encode(body),
                 contentType: nil, options: options
             )
         }
@@ -25,7 +26,7 @@ struct HTTPTransport: Sendable {
     /// entirely, matching the reference SDKs treating unset params as absent rather than `"nil"`.
     /// `arrayQuery` covers list-valued params (e.g. `Files.list`'s `ids`); the reference SDKs
     /// configure their querystring serializer with `array_format="brackets"`, i.e. `ids[]=a&ids[]=b`.
-    func get<Response: Decodable>(
+    package func get<Response: Decodable>(
         path: String,
         query: [String: String?] = [:],
         arrayQuery: [String: [String]?] = [:],
@@ -41,25 +42,28 @@ struct HTTPTransport: Sendable {
 
     /// POST with an empty `{}` body, for parameter-less action endpoints like
     /// `MessageBatches.cancel` that are semantically actions rather than a plain GET.
-    func post<Response: Decodable>(
+    package func post<Response: Decodable>(
         path: String,
+        query: [String: String?] = [:],
         options: RequestOptions
     ) async throws -> Response {
         try await withRetries(options: options) {
             try await performRequest(
-                method: "POST", path: path, httpBody: Data("{}".utf8), contentType: nil, options: options
+                method: "POST", path: path, query: query, httpBody: Data("{}".utf8), contentType: nil,
+                options: options
             )
         }
     }
 
     /// DELETE with no body, for the various `*_deleted` endpoints.
-    func delete<Response: Decodable>(
+    package func delete<Response: Decodable>(
         path: String,
+        query: [String: String?] = [:],
         options: RequestOptions
     ) async throws -> Response {
         try await withRetries(options: options) {
             try await performRequest(
-                method: "DELETE", path: path, httpBody: nil, contentType: nil, options: options
+                method: "DELETE", path: path, query: query, httpBody: nil, contentType: nil, options: options
             )
         }
     }
@@ -68,7 +72,7 @@ struct HTTPTransport: Sendable {
     /// and `MessageBatches.results` (a `.jsonl` stream the caller splits and decodes line-by-line).
     /// `path` may be a path relative to `client.baseURL` or an absolute URL string -- `results_url`
     /// on a `MessageBatch` is already a full URL returned by the server.
-    func getData(
+    package func getData(
         path: String,
         query: [String: String?] = [:],
         accept: String? = nil,
@@ -83,14 +87,15 @@ struct HTTPTransport: Sendable {
 
     /// POST with a `multipart/form-data` body, for the three upload endpoints (`Files.upload`,
     /// `Skills.create`, `Skills.Versions.create`).
-    func postMultipart<Response: Decodable>(
+    package func postMultipart<Response: Decodable>(
         path: String,
+        query: [String: String?] = [:],
         multipart: MultipartFormData,
         options: RequestOptions
     ) async throws -> Response {
         try await withRetries(options: options) {
             try await performRequest(
-                method: "POST", path: path, httpBody: multipart.encode(),
+                method: "POST", path: path, query: query, httpBody: multipart.encode(),
                 contentType: multipart.contentType, options: options
             )
         }
@@ -101,14 +106,15 @@ struct HTTPTransport: Sendable {
     /// decoded-SSE sequence rather than a fully-decoded `Response`. Retries, like `send`, only
     /// cover establishing the connection -- once a 200 with a body stream is in hand, failures
     /// while consuming it surface through the stream itself rather than being retried silently.
-    func stream(
+    package func stream(
         method: String,
         path: String,
+        query: [String: String?] = [:],
         body: Data,
         options: RequestOptions
     ) async throws -> (response: HTTPURLResponse, sse: AsyncThrowingStream<ServerSentEvent, Error>) {
         try await withRetries(options: options) {
-            try await performStreamingRequest(method: method, path: path, body: body, options: options)
+            try await performStreamingRequest(method: method, path: path, query: query, body: body, options: options)
         }
     }
 
@@ -252,11 +258,12 @@ struct HTTPTransport: Sendable {
     private func performStreamingRequest(
         method: String,
         path: String,
+        query: [String: String?] = [:],
         body: Data,
         options: RequestOptions
     ) async throws -> (response: HTTPURLResponse, sse: AsyncThrowingStream<ServerSentEvent, Error>) {
         let request = try await buildRequest(
-            method: method, path: path, httpBody: body, contentType: nil, options: options
+            method: method, path: path, query: query, httpBody: body, contentType: nil, options: options
         )
 
         let bytes: URLSession.AsyncBytes
