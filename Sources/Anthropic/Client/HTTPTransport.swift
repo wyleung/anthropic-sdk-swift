@@ -12,11 +12,36 @@ struct HTTPTransport: Sendable {
         body: Body,
         options: RequestOptions
     ) async throws -> Response {
+        try await withRetries(options: options) {
+            try await performRequest(method: method, path: path, body: body, options: options)
+        }
+    }
+
+    /// Like `send`, but for SSE endpoints: `body` is pre-encoded (callers typically need to inject
+    /// a `"stream": true` field the public param type doesn't expose) and the return is the raw
+    /// decoded-SSE sequence rather than a fully-decoded `Response`. Retries, like `send`, only
+    /// cover establishing the connection -- once a 200 with a body stream is in hand, failures
+    /// while consuming it surface through the stream itself rather than being retried silently.
+    func stream(
+        method: String,
+        path: String,
+        body: Data,
+        options: RequestOptions
+    ) async throws -> (response: HTTPURLResponse, sse: AsyncThrowingStream<ServerSentEvent, Error>) {
+        try await withRetries(options: options) {
+            try await performStreamingRequest(method: method, path: path, body: body, options: options)
+        }
+    }
+
+    private func withRetries<T>(
+        options: RequestOptions,
+        operation: () async throws -> T
+    ) async throws -> T {
         let maxRetries = options.maxRetries ?? client.maxRetries
         var attempt = 0
         while true {
             do {
-                return try await performRequest(method: method, path: path, body: body, options: options)
+                return try await operation()
             } catch let error as AnthropicError {
                 attempt += 1
                 guard attempt <= maxRetries, error.isRetryable else { throw error }
@@ -26,15 +51,15 @@ struct HTTPTransport: Sendable {
         }
     }
 
-    private func performRequest<Body: Encodable, Response: Decodable>(
+    private func buildRequest(
         method: String,
         path: String,
-        body: Body,
+        httpBody: Data,
         options: RequestOptions
-    ) async throws -> Response {
+    ) async throws -> URLRequest {
         var request = URLRequest(url: client.baseURL.appendingPathComponent(path))
         request.httpMethod = method
-        request.httpBody = try Self.encoder.encode(body)
+        request.httpBody = httpBody
         request.timeoutInterval = options.timeout ?? client.timeout
 
         var headers = client.defaultHeaders
@@ -50,6 +75,18 @@ struct HTTPTransport: Sendable {
         for (key, value) in headers {
             request.setValue(value, forHTTPHeaderField: key)
         }
+        return request
+    }
+
+    private func performRequest<Body: Encodable, Response: Decodable>(
+        method: String,
+        path: String,
+        body: Body,
+        options: RequestOptions
+    ) async throws -> Response {
+        let request = try await buildRequest(
+            method: method, path: path, httpBody: try Self.encoder.encode(body), options: options
+        )
 
         let data: Data
         let response: URLResponse
@@ -69,6 +106,38 @@ struct HTTPTransport: Sendable {
             throw AnthropicError.from(response: http, body: errorBody)
         }
         return try Self.decoder.decode(Response.self, from: data)
+    }
+
+    private func performStreamingRequest(
+        method: String,
+        path: String,
+        body: Data,
+        options: RequestOptions
+    ) async throws -> (response: HTTPURLResponse, sse: AsyncThrowingStream<ServerSentEvent, Error>) {
+        let request = try await buildRequest(method: method, path: path, httpBody: body, options: options)
+
+        let bytes: URLSession.AsyncBytes
+        let response: URLResponse
+        do {
+            (bytes, response) = try await client.urlSession.bytes(for: request)
+        } catch let urlError as URLError where urlError.code == .timedOut {
+            throw AnthropicError.timeout(message: AnthropicError.defaultTimeoutMessage)
+        } catch {
+            throw AnthropicError.connection(message: AnthropicError.defaultConnectionMessage)
+        }
+
+        guard let http = response as? HTTPURLResponse else {
+            throw AnthropicError.connection(message: AnthropicError.defaultConnectionMessage)
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            var errorData = Data()
+            for try await byte in bytes {
+                errorData.append(byte)
+            }
+            let errorBody = try? Self.decoder.decode(JSONValue.self, from: errorData)
+            throw AnthropicError.from(response: http, body: errorBody)
+        }
+        return (http, sseEvents(from: sseLines(from: bytes)))
     }
 
     private static func backoffDelay(attempt: Int, retryAfter: TimeInterval?) -> TimeInterval {
