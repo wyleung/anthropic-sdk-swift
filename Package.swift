@@ -18,5 +18,6 @@ let package = Package(
         .target(name: "Anthropic"),
         .target(name: "AnthropicBeta", dependencies: ["Anthropic"]),
         .testTarget(name: "AnthropicTests", dependencies: ["Anthropic"]),
+        .testTarget(name: "AnthropicBetaTests", dependencies: ["Anthropic", "AnthropicBeta"]),
     ]
 )
