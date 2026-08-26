@@ -298,13 +298,13 @@ package struct HTTPTransport: Sendable {
         return exponential + exponential * Double.random(in: 0...0.25)
     }
 
-    static let encoder: JSONEncoder = {
+    package static let encoder: JSONEncoder = {
         let encoder = JSONEncoder()
         encoder.keyEncodingStrategy = .convertToSnakeCase
         return encoder
     }()
 
-    static let decoder: JSONDecoder = {
+    package static let decoder: JSONDecoder = {
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
         return decoder

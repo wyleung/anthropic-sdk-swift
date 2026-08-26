@@ -6,6 +6,11 @@ public struct ThinkingBlock: Codable, Sendable, Equatable {
     private enum CodingKeys: String, CodingKey {
         case type, thinking, signature
     }
+
+    public init(thinking: String, signature: String) {
+        self.thinking = thinking
+        self.signature = signature
+    }
 }
 
 public struct RedactedThinkingBlock: Codable, Sendable, Equatable {

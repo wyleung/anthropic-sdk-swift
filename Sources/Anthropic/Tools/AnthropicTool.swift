@@ -12,7 +12,9 @@ extension ToolOutput: ExpressibleByStringLiteral {
 }
 
 extension ToolOutput {
-    var asToolResultContent: ToolResultContentParam {
+    /// `package` rather than `internal` so `AnthropicBeta`'s `BetaToolRunner` can reuse this
+    /// instead of duplicating it.
+    package var asToolResultContent: ToolResultContentParam {
         switch self {
         case .text(let text): return .text(text)
         case .blocks(let blocks): return .blocks(blocks)
@@ -87,7 +89,9 @@ public struct AnyAnthropicTool: Sendable {
         try await runClosure(input, context)
     }
 
-    var toolParam: ToolParam {
+    /// `package` rather than `internal` so `AnthropicBeta`'s `BetaToolRunner` can splice tools
+    /// into `BetaToolUnionParam.tool(.custom(...))` the same way GA's `ToolRunner` does.
+    package var toolParam: ToolParam {
         ToolParam(name: name, inputSchema: inputSchema, description: description)
     }
 }

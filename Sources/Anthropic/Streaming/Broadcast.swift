@@ -8,20 +8,22 @@
 /// it never misses elements, since `subscribe()` and `publish`/`finish` are all actor-isolated and
 /// none of `subscribe()`'s work suspends before either capturing the current history+terminal
 /// state or registering for future pushes, so no element can be published in the gap between them.
-actor Broadcast<Element: Sendable> {
+package actor Broadcast<Element: Sendable> {
     private var history: [Element] = []
     private var terminal: Result<Void, Error>?
     private var continuations: [Int: AsyncThrowingStream<Element, Error>.Continuation] = [:]
     private var nextSubscriberID = 0
 
-    func publish(_ element: Element) {
+    package init() {}
+
+    package func publish(_ element: Element) {
         history.append(element)
         for continuation in continuations.values {
             continuation.yield(element)
         }
     }
 
-    func finish(throwing error: Error? = nil) {
+    package func finish(throwing error: Error? = nil) {
         guard terminal == nil else { return }
         terminal = error.map(Result.failure) ?? .success(())
         for continuation in continuations.values {
@@ -30,7 +32,7 @@ actor Broadcast<Element: Sendable> {
         continuations.removeAll()
     }
 
-    func subscribe() -> AsyncThrowingStream<Element, Error> {
+    package func subscribe() -> AsyncThrowingStream<Element, Error> {
         let id = nextSubscriberID
         nextSubscriberID += 1
         return AsyncThrowingStream { continuation in

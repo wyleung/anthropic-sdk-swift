@@ -61,7 +61,7 @@ public enum AnthropicError: Error, Sendable {
         }
     }
 
-    static func from(response: HTTPURLResponse, body: JSONValue?) -> AnthropicError {
+    package static func from(response: HTTPURLResponse, body: JSONValue?) -> AnthropicError {
         let detail = APIErrorDetail(
             statusCode: response.statusCode,
             requestID: response.value(forHTTPHeaderField: "request-id"),

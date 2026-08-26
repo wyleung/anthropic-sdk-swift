@@ -1,7 +1,9 @@
 extension Caller {
     /// `.unknown` has no request-side representation (`CallerParam` has no such case), so it
     /// drops to `nil` rather than failing the whole conversion over a caller-metadata mismatch.
-    var asParam: CallerParam? {
+    /// `package` rather than `internal` so `AnthropicBeta`'s broader response-block echo can
+    /// reuse this instead of duplicating it.
+    package var asParam: CallerParam? {
         switch self {
         case .direct: return .direct
         case .codeExecution20250825(let toolId): return .codeExecution20250825(toolId: toolId)
@@ -12,7 +14,9 @@ extension Caller {
 }
 
 extension TextCitation {
-    var asParam: TextCitationParam? {
+    /// `package` rather than `internal` so `AnthropicBeta`'s broader response-block echo can
+    /// reuse this instead of duplicating it.
+    package var asParam: TextCitationParam? {
         switch self {
         case .charLocation(let location):
             return .charLocation(CitationCharLocationParam(

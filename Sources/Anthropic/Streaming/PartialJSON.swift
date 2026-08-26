@@ -9,8 +9,8 @@
 /// a streamed string argument renders character-by-character); any other truncated trailing
 /// token -- a partial key, number, literal, or an in-progress nested container's last element --
 /// is dropped, since a half-typed key or number isn't a meaningful value to show.
-enum PartialJSON {
-    static func parse(_ text: String) throws -> JSONValue {
+package enum PartialJSON {
+    package static func parse(_ text: String) throws -> JSONValue {
         var scanner = JSONScanner(text)
         do {
             return try scanner.parseValue()
