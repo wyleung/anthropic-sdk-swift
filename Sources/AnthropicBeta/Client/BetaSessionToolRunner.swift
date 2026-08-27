@@ -115,6 +115,10 @@ public actor SessionToolRunner {
         let confirmation: ToolConfirmationVerdict?
     }
 
+    /// Retained strongly (not just via `events`, which only holds the client `unowned`) so the
+    /// client outlives every in-flight request for as long as this runner itself is alive -- a
+    /// caller that drops its own reference to the client but keeps the runner must not crash.
+    private let client: AnthropicClient
     private let events: BetaSessionEvents
     private let sessionId: String
     private let toolsByName: [String: AnyAnthropicTool]
@@ -153,6 +157,7 @@ public actor SessionToolRunner {
         betas: [String] = [],
         options: RequestOptions = RequestOptions()
     ) {
+        self.client = client
         self.events = BetaSessionEvents(client: client)
         self.sessionId = sessionId
         self.toolsByName = Dictionary(tools.map { ($0.name, $0) }, uniquingKeysWith: { _, latest in latest })
