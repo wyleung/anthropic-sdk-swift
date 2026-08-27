@@ -193,6 +193,17 @@ extension BetaManagedAgentsEventParams: Encodable {
     }
 }
 
+/// Request body for `client.beta.sessions.events.send`. Ported from `event_send_params.py`'s
+/// `EventSendParams` (the `betas` field there is a header alias handled by `betaRequestOptions`
+/// instead, so only `events` is modeled here).
+public struct BetaSessionEventSendParams: Encodable, Sendable, Equatable {
+    public let events: [BetaManagedAgentsEventParams]
+
+    public init(events: [BetaManagedAgentsEventParams]) {
+        self.events = events
+    }
+}
+
 /// Ported from the `Data` union local to `beta_managed_agents_send_session_events.py`. Response-side
 /// echo of the events that were successfully sent; reuses 7 of the 35 leaf event structs from
 /// `BetaManagedAgentsSessionEvent`.

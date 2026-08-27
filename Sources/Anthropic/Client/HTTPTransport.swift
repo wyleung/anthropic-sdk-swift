@@ -110,11 +110,14 @@ package struct HTTPTransport: Sendable {
         method: String,
         path: String,
         query: [String: String?] = [:],
+        arrayQuery: [String: [String]?] = [:],
         body: Data,
         options: RequestOptions
     ) async throws -> (response: HTTPURLResponse, sse: AsyncThrowingStream<ServerSentEvent, Error>) {
         try await withRetries(options: options) {
-            try await performStreamingRequest(method: method, path: path, query: query, body: body, options: options)
+            try await performStreamingRequest(
+                method: method, path: path, query: query, arrayQuery: arrayQuery, body: body, options: options
+            )
         }
     }
 
@@ -259,11 +262,13 @@ package struct HTTPTransport: Sendable {
         method: String,
         path: String,
         query: [String: String?] = [:],
+        arrayQuery: [String: [String]?] = [:],
         body: Data,
         options: RequestOptions
     ) async throws -> (response: HTTPURLResponse, sse: AsyncThrowingStream<ServerSentEvent, Error>) {
         let request = try await buildRequest(
-            method: method, path: path, query: query, httpBody: body, contentType: nil, options: options
+            method: method, path: path, query: query, arrayQuery: arrayQuery, httpBody: body, contentType: nil,
+            options: options
         )
 
         let bytes: URLSession.AsyncBytes

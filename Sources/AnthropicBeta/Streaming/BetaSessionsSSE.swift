@@ -36,6 +36,31 @@ enum BetaSessionsSSE {
         }
     }
 
+    /// Wraps a raw SSE response into the translated event sequence, matching Python's
+    /// `Stream[BetaManagedAgentsStreamSessionEvents]` -- a plain single-consumer async iterator with
+    /// no accumulation or multi-subscriber support (unlike `BetaMessageStream`, which exists because
+    /// Python's `messages.stream()` returns a dedicated `MessageStream` class offering several named
+    /// views onto the same feed; `events.stream()` has no such counterpart).
+    static func stream(
+        response: HTTPURLResponse, sse: AsyncThrowingStream<ServerSentEvent, Error>
+    ) -> AsyncThrowingStream<BetaManagedAgentsStreamSessionEvents, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    for try await sseEvent in sse {
+                        if let event = try translate(sseEvent, response: response) {
+                            continuation.yield(event)
+                        }
+                    }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
     /// Mirrors Python's `if is_dict(data) and "type" not in data: data["type"] = sse.event`. See
     /// GA's `MessagesSSE.injectingType` for why this uses `JSONSerialization` directly rather than
     /// round-tripping through `JSONValue`.
