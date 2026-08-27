@@ -3,8 +3,8 @@ import Anthropic
 
 /// Exposed as `client.beta.sessions.events`, mirroring `resources/beta/sessions/events.py`. Every
 /// method sends `betaQuery` and merges in the mandatory `managed-agents-2026-04-01` beta header via
-/// `betaRequestOptions`. `tool_runner` (Python's event-sourced session tool runner) belongs to
-/// Slice 4 Milestone D per the governing plan and is deliberately not ported here.
+/// `betaRequestOptions`. `toolRunner(...)` constructs Python's event-sourced session tool runner --
+/// see `SessionToolRunner` for the implementation.
 public struct BetaSessionEvents: Sendable {
     unowned let client: AnthropicClient
 
@@ -84,6 +84,26 @@ public struct BetaSessionEvents: Sendable {
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
         )
         return BetaSessionsSSE.stream(response: response, sse: sse)
+    }
+
+    /// Builds a `SessionToolRunner` that watches this session's events, dispatches
+    /// `agent.tool_use`/`agent.custom_tool_use` events to `tools`, and posts results back --
+    /// mirroring `BetaMessages.toolRunner`'s factory shape. `maxIdle` stops the runner after this
+    /// many seconds of session inactivity following an `end_turn` idle event (`nil` disables the
+    /// idle watchdog entirely). `environmentKey` scopes every request the runner makes to a
+    /// `self_hosted` environment's own bearer token instead of the client's API key.
+    public func toolRunner(
+        sessionId: String,
+        tools: [AnyAnthropicTool],
+        maxIdle: TimeInterval? = 60,
+        environmentKey: String? = nil,
+        betas: [String] = [],
+        options: RequestOptions = RequestOptions()
+    ) -> SessionToolRunner {
+        SessionToolRunner(
+            client: client, sessionId: sessionId, tools: tools, maxIdle: maxIdle,
+            environmentKey: environmentKey, betas: betas, options: options
+        )
     }
 }
 
