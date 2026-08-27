@@ -178,6 +178,44 @@ final class BetaCredentialAuthTests: XCTestCase {
         XCTAssertNil(json["mcp_server_url"], "mcpServerUrl is immutable and has no update field")
     }
 
+    func testCredentialAuthUpdateParamsEncodesEnvironmentVariableVariant() throws {
+        let update = BetaCredentialAuthUpdateParams.environmentVariable(
+            BetaManagedAgentsEnvironmentVariableUpdateParams(secretValue: "new-secret")
+        )
+        let encoded = try HTTPTransport.encoder.encode(update)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        XCTAssertEqual(json["type"] as? String, "environment_variable")
+        XCTAssertEqual(json["secret_value"] as? String, "new-secret")
+        XCTAssertNil(json["secret_name"], "secretName is immutable and has no update field")
+        XCTAssertNil(json["networking"])
+        XCTAssertNil(json["injection_location"])
+    }
+
+    func testCredentialAuthUpdateParamsEncodesMCPOAuthVariant() throws {
+        let update = BetaCredentialAuthUpdateParams.mcpOAuth(
+            BetaManagedAgentsMCPOAuthUpdateParams(
+                accessToken: "new-access-token",
+                refresh: BetaManagedAgentsMCPOAuthRefreshUpdateParams(
+                    refreshToken: "new-refresh-token",
+                    tokenEndpointAuth: .clientSecretPost(
+                        BetaManagedAgentsTokenEndpointAuthPostUpdateParam(clientSecret: "new-post-secret")
+                    )
+                )
+            )
+        )
+        let encoded = try HTTPTransport.encoder.encode(update)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        XCTAssertEqual(json["type"] as? String, "mcp_oauth")
+        XCTAssertEqual(json["access_token"] as? String, "new-access-token")
+        XCTAssertNil(json["mcp_server_url"], "mcpServerUrl is immutable and has no update field")
+        let refreshJson = try XCTUnwrap(json["refresh"] as? [String: Any])
+        XCTAssertEqual(refreshJson["refresh_token"] as? String, "new-refresh-token")
+        XCTAssertNil(refreshJson["client_id"], "clientId is immutable and has no update field")
+        let authJson = try XCTUnwrap(refreshJson["token_endpoint_auth"] as? [String: Any])
+        XCTAssertEqual(authJson["type"] as? String, "client_secret_post")
+        XCTAssertEqual(authJson["client_secret"] as? String, "new-post-secret")
+    }
+
     // MARK: - CredentialNetworkingParams union
 
     func testCredentialNetworkingParamsEncodesBothVariants() throws {
