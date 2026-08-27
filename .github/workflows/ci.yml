@@ -7,12 +7,60 @@ on:
 
 jobs:
   test:
-    runs-on: macos-latest
+    runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
-        xcode: ["16.0", "15.4"]
+        # Track OS labels, not exact Xcode point releases: GitHub periodically
+        # retires old Xcode versions from `macos-latest` as it rolls the image
+        # forward (this is what broke CI previously — pinned Xcode_16.0/15.4
+        # no longer exist once `macos-latest` moved to the macOS 26 image).
+        # macos-15 stays on a fixed, long-supported Xcode generation; the
+        # `latest` label always tracks whatever Xcode ships as current.
+        os: [macos-15, macos-latest]
     steps:
       - uses: actions/checkout@v4
-      - run: sudo xcode-select -s /Applications/Xcode_${{ matrix.xcode }}.app
+
       - run: swift build
-      - run: swift test
+
+      - run: swift test --enable-code-coverage
+
+      - name: Generate code coverage report
+        if: matrix.os == 'macos-latest'
+        run: |
+          BIN_PATH=$(swift build --show-bin-path)
+          XCTEST_BIN="$BIN_PATH/anthropic-sdk-swiftPackageTests.xctest/Contents/MacOS/anthropic-sdk-swiftPackageTests"
+          PROFDATA="$BIN_PATH/codecov/default.profdata"
+
+          xcrun llvm-cov report "$XCTEST_BIN" \
+            -instr-profile="$PROFDATA" \
+            -ignore-filename-regex='\.build|Tests/' \
+            > coverage-report.txt
+
+          xcrun llvm-cov export "$XCTEST_BIN" \
+            -instr-profile="$PROFDATA" \
+            -ignore-filename-regex='\.build|Tests/' \
+            -format=lcov \
+            > coverage.lcov
+
+          {
+            echo "### Code coverage"
+            echo '```'
+            tail -n 4 coverage-report.txt
+            echo '```'
+            echo "<details><summary>Per-file coverage</summary>"
+            echo
+            echo '```'
+            cat coverage-report.txt
+            echo '```'
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage artifacts
+        if: matrix.os == 'macos-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: code-coverage
+          path: |
+            coverage-report.txt
+            coverage.lcov
