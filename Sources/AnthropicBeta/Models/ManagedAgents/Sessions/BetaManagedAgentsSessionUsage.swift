@@ -20,12 +20,17 @@ public struct BetaManagedAgentsServerToolUsage: Codable, Sendable, Equatable {
 /// shape as GA's `CacheCreation` -- these fields are `Int?` here, `Int` (non-optional) on GA's
 /// type.
 public struct BetaManagedAgentsCacheCreationUsage: Codable, Sendable, Equatable {
-    public let ephemeral1hInputTokens: Int?
-    public let ephemeral5mInputTokens: Int?
+    /// Capital `H`/`M` (not `ephemeral1hInputTokens`/`ephemeral5mInputTokens`) is deliberate:
+    /// Foundation's `.convertFromSnakeCase` maps the wire's `ephemeral_1h_input_tokens` /
+    /// `ephemeral_5m_input_tokens` to `ephemeral1HInputTokens` / `ephemeral5MInputTokens`,
+    /// uppercasing the letter immediately after a digit run rather than the first character of the
+    /// `1h`/`5m` segment. See `CacheCreation` (GA) for the same fix.
+    public let ephemeral1HInputTokens: Int?
+    public let ephemeral5MInputTokens: Int?
 
-    public init(ephemeral1hInputTokens: Int? = nil, ephemeral5mInputTokens: Int? = nil) {
-        self.ephemeral1hInputTokens = ephemeral1hInputTokens
-        self.ephemeral5mInputTokens = ephemeral5mInputTokens
+    public init(ephemeral1HInputTokens: Int? = nil, ephemeral5MInputTokens: Int? = nil) {
+        self.ephemeral1HInputTokens = ephemeral1HInputTokens
+        self.ephemeral5MInputTokens = ephemeral5MInputTokens
     }
 }
 
