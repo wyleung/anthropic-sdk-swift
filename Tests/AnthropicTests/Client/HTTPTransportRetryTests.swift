@@ -92,6 +92,17 @@ final class HTTPTransportRetryTests: XCTestCase {
         XCTAssertLessThan(elapsed, 0.3)
     }
 
+    func testBackoffJitterOnlyEverShavesTimeOffTheExponentialDelayNeverAddsToIt() {
+        // attempt 1 -> exponential = min(0.5 * 2^0, 8.0) = 0.5. The pre-fix formula
+        // (`exponential + exponential * jitter`) could return up to 0.625 here; the fix
+        // (`exponential * (1 - jitter)`) must stay within [0.375, 0.5].
+        for _ in 0..<200 {
+            let delay = HTTPTransport.backoffDelay(attempt: 1, retryAfter: nil)
+            XCTAssertLessThanOrEqual(delay, 0.5)
+            XCTAssertGreaterThanOrEqual(delay, 0.375)
+        }
+    }
+
     func testAuthenticationErrorInvalidatesCredentialsExactlyOnceAndRetries() async throws {
         let callCount = Locked(0)
         MockURLProtocol.responder = { request in

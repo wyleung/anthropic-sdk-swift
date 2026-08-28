@@ -305,7 +305,10 @@ package struct HTTPTransport: Sendable {
         return (http, sseEvents(from: sseLines(from: bytes)))
     }
 
-    private static func backoffDelay(attempt: Int, retryAfter: TimeInterval?) -> TimeInterval {
+    /// Not `private` so `HTTPTransportRetryTests` can exercise the jitter formula directly rather
+    /// than inferring it from elapsed wall-clock time (whose buggy-vs-fixed ranges touch at the
+    /// same boundary value and would make a timing-based regression test flaky).
+    static func backoffDelay(attempt: Int, retryAfter: TimeInterval?) -> TimeInterval {
         if let retryAfter, retryAfter >= 0, retryAfter <= 60 {
             return retryAfter
         }
