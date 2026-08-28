@@ -103,6 +103,45 @@ final class HTTPTransportRetryTests: XCTestCase {
         }
     }
 
+    func testUnderlyingCancelledURLErrorSurfacesAsCancellationErrorAndIsNotRetried() async throws {
+        // Fix #6: `URLError.cancelled` must not fall into the generic catch that produces
+        // `AnthropicError.connection` (which `withRetries` would then retry) -- it should surface
+        // immediately as `CancellationError`, which isn't an `AnthropicError` at all.
+        let callCount = Locked(0)
+        MockURLProtocol.responder = { _ in
+            callCount.increment()
+            throw URLError(.cancelled)
+        }
+
+        let client = AnthropicClient(apiKey: "test-key", urlSession: MockURLProtocol.makeSession())
+        do {
+            _ = try await client.models.retrieve("claude-opus-5")
+            XCTFail("expected CancellationError")
+        } catch is CancellationError {
+            // expected
+        }
+        XCTAssertEqual(callCount.value, 1)
+    }
+
+    func testUnderlyingCancelledURLErrorDuringStreamingSurfacesAsCancellationErrorAndIsNotRetried() async throws {
+        let callCount = Locked(0)
+        MockURLProtocol.responder = { _ in
+            callCount.increment()
+            throw URLError(.cancelled)
+        }
+
+        let client = AnthropicClient(apiKey: "test-key", urlSession: MockURLProtocol.makeSession())
+        do {
+            _ = try await client.transport.stream(
+                method: "POST", path: "v1/messages", body: Data("{}".utf8), options: RequestOptions()
+            )
+            XCTFail("expected CancellationError")
+        } catch is CancellationError {
+            // expected
+        }
+        XCTAssertEqual(callCount.value, 1)
+    }
+
     func testAuthenticationErrorInvalidatesCredentialsExactlyOnceAndRetries() async throws {
         let callCount = Locked(0)
         MockURLProtocol.responder = { request in
