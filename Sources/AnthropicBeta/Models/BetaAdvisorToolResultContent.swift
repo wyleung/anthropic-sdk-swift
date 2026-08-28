@@ -1,3 +1,5 @@
+import Anthropic
+
 /// Ported from the `Content` type alias in `types/beta/beta_advisor_tool_result_block.py` (and its
 /// param-side twin in `beta_advisor_tool_result_block_param.py`, which unions the same three shapes).
 /// Since `BetaAdvisorToolResultError`/`BetaAdvisorResultBlock`/`BetaAdvisorRedactedResultBlock` are
@@ -8,6 +10,7 @@ public enum BetaAdvisorToolResultContent: Sendable, Equatable {
     case error(BetaAdvisorToolResultError)
     case result(BetaAdvisorResultBlock)
     case redactedResult(BetaAdvisorRedactedResultBlock)
+    case unknown(type: String, raw: JSONValue)
 }
 
 extension BetaAdvisorToolResultContent: Codable {
@@ -23,10 +26,7 @@ extension BetaAdvisorToolResultContent: Codable {
         case "advisor_result": self = .result(try BetaAdvisorResultBlock(from: decoder))
         case "advisor_redacted_result": self = .redactedResult(try BetaAdvisorRedactedResultBlock(from: decoder))
         default:
-            throw DecodingError.dataCorruptedError(
-                forKey: .type, in: discriminator,
-                debugDescription: "Unrecognized BetaAdvisorToolResultContent type: \(type)"
-            )
+            self = .unknown(type: type, raw: try JSONValue(from: decoder))
         }
     }
 
@@ -35,6 +35,7 @@ extension BetaAdvisorToolResultContent: Codable {
         case .error(let value): try value.encode(to: encoder)
         case .result(let value): try value.encode(to: encoder)
         case .redactedResult(let value): try value.encode(to: encoder)
+        case .unknown(_, let raw): try raw.encode(to: encoder)
         }
     }
 }

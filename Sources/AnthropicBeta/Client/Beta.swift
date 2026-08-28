@@ -32,7 +32,7 @@ func betaRequestOptions(
     betas: [String], requiredBeta: String? = nil, userProfileId: String? = nil, base options: RequestOptions
 ) -> RequestOptions {
     var merged = options
-    if merged.headers["anthropic-beta"] == nil {
+    if !merged.headers.hasKey("anthropic-beta") {
         var flags = betas
         if let requiredBeta, !flags.contains(requiredBeta) {
             flags.append(requiredBeta)
@@ -41,8 +41,18 @@ func betaRequestOptions(
             merged.headers["anthropic-beta"] = flags.joined(separator: ",")
         }
     }
-    if let userProfileId, merged.headers["anthropic-user-profile-id"] == nil {
+    if let userProfileId, !merged.headers.hasKey("anthropic-user-profile-id") {
         merged.headers["anthropic-user-profile-id"] = userProfileId
     }
     return merged
+}
+
+extension Dictionary where Key == String {
+    /// `RequestOptions.headers` is a plain `[String: String?]`, so a caller-supplied header with
+    /// different casing (e.g. `Anthropic-Beta`) would otherwise create a second dictionary key
+    /// rather than being recognized as "already set" -- `HTTPTransport.buildRequest`'s unordered
+    /// header loop would then apply both non-deterministically.
+    fileprivate func hasKey(_ name: String) -> Bool {
+        keys.contains { $0.caseInsensitiveCompare(name) == .orderedSame }
+    }
 }

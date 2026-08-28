@@ -13,12 +13,34 @@ public struct BetaEnvironment: Codable, Sendable, Equatable {
     public let updatedAt: String
     /// Only meaningful for self-hosted environments; `nil` on cloud environments.
     public let scope: BetaEnvironmentScope?
+
+    public init(
+        id: String, archivedAt: String? = nil, config: BetaEnvironmentConfig, createdAt: String,
+        description: String? = nil, metadata: [String: String], name: String, type: String = "environment",
+        updatedAt: String, scope: BetaEnvironmentScope? = nil
+    ) {
+        self.id = id
+        self.archivedAt = archivedAt
+        self.config = config
+        self.createdAt = createdAt
+        self.description = description
+        self.metadata = metadata
+        self.name = name
+        self.type = type
+        self.updatedAt = updatedAt
+        self.scope = scope
+    }
 }
 
 /// Ported from `types/beta/beta_environment_delete_response.py`.
 public struct BetaEnvironmentDeleteResponse: Codable, Sendable, Equatable {
     public let id: String
     public let type: String
+
+    public init(id: String, type: String = "environment_deleted") {
+        self.id = id
+        self.type = type
+    }
 }
 
 /// Ported from the inline `Literal["organization", "account"]` used by both

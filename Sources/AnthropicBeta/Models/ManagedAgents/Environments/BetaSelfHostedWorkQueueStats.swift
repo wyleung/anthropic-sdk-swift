@@ -9,4 +9,15 @@ public struct BetaSelfHostedWorkQueueStats: Codable, Sendable, Equatable {
     /// Number of workers that polled for work in the last 30 seconds. Requires `workerId` to be
     /// sent with poll requests.
     public let workersPolling: Int?
+
+    public init(
+        depth: Int, oldestQueuedAt: String? = nil, pending: Int, type: String = "work_queue_stats",
+        workersPolling: Int? = nil
+    ) {
+        self.depth = depth
+        self.oldestQueuedAt = oldestQueuedAt
+        self.pending = pending
+        self.type = type
+        self.workersPolling = workersPolling
+    }
 }

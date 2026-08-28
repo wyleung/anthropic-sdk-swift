@@ -36,6 +36,10 @@ extension BetaEnvironmentNetworking: Codable {
 /// Ported from `types/beta/beta_unrestricted_network.py`.
 public struct BetaUnrestrictedNetwork: Codable, Sendable, Equatable {
     public let type: String
+
+    public init(type: String = "unrestricted") {
+        self.type = type
+    }
 }
 
 /// Ported from `types/beta/beta_limited_network.py`. Unlike its params-side twin
@@ -46,4 +50,13 @@ public struct BetaLimitedNetwork: Codable, Sendable, Equatable {
     public let allowPackageManagers: Bool
     public let allowedHosts: [String]
     public let type: String
+
+    public init(
+        allowMcpServers: Bool, allowPackageManagers: Bool, allowedHosts: [String], type: String = "limited"
+    ) {
+        self.allowMcpServers = allowMcpServers
+        self.allowPackageManagers = allowPackageManagers
+        self.allowedHosts = allowedHosts
+        self.type = type
+    }
 }

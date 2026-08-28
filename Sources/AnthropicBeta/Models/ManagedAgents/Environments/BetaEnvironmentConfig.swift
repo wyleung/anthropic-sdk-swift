@@ -37,6 +37,12 @@ public struct BetaCloudConfig: Codable, Sendable, Equatable {
     public let networking: BetaEnvironmentNetworking
     public let packages: BetaPackages
     public let type: String
+
+    public init(networking: BetaEnvironmentNetworking, packages: BetaPackages, type: String = "cloud") {
+        self.networking = networking
+        self.packages = packages
+        self.type = type
+    }
 }
 
 /// Ported from `types/beta/beta_self_hosted_config.py` -- carries no fields beyond the
@@ -44,4 +50,8 @@ public struct BetaCloudConfig: Codable, Sendable, Equatable {
 /// something Anthropic's API configures.
 public struct BetaSelfHostedConfig: Codable, Sendable, Equatable {
     public let type: String
+
+    public init(type: String = "self_hosted") {
+        self.type = type
+    }
 }

@@ -10,4 +10,17 @@ public struct BetaPackages: Codable, Sendable, Equatable {
     public let npm: [String]
     public let pip: [String]
     public let type: String?
+
+    public init(
+        apt: [String], cargo: [String], gem: [String], go: [String], npm: [String], pip: [String],
+        type: String? = nil
+    ) {
+        self.apt = apt
+        self.cargo = cargo
+        self.gem = gem
+        self.go = go
+        self.npm = npm
+        self.pip = pip
+        self.type = type
+    }
 }

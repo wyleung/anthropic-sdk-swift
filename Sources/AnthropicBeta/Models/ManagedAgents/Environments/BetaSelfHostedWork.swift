@@ -17,12 +17,38 @@ public struct BetaSelfHostedWork: Codable, Sendable, Equatable {
     public let stopRequestedAt: String?
     public let stoppedAt: String?
     public let type: String
+
+    public init(
+        id: String, acknowledgedAt: String? = nil, createdAt: String, data: BetaSessionWorkData,
+        environmentId: String, latestHeartbeatAt: String? = nil, metadata: [String: String],
+        secret: String? = nil, startedAt: String? = nil, state: BetaWorkState,
+        stopRequestedAt: String? = nil, stoppedAt: String? = nil, type: String = "work"
+    ) {
+        self.id = id
+        self.acknowledgedAt = acknowledgedAt
+        self.createdAt = createdAt
+        self.data = data
+        self.environmentId = environmentId
+        self.latestHeartbeatAt = latestHeartbeatAt
+        self.metadata = metadata
+        self.secret = secret
+        self.startedAt = startedAt
+        self.state = state
+        self.stopRequestedAt = stopRequestedAt
+        self.stoppedAt = stoppedAt
+        self.type = type
+    }
 }
 
 /// Ported from `types/beta/environments/beta_session_work_data.py`.
 public struct BetaSessionWorkData: Codable, Sendable, Equatable {
     public let id: String
     public let type: String
+
+    public init(id: String, type: String = "session") {
+        self.id = id
+        self.type = type
+    }
 }
 
 /// Ported from the inline `Literal["queued", "starting", "active", "stopping", "stopped"]` shared
