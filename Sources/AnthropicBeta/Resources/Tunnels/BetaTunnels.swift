@@ -36,7 +36,7 @@ public struct BetaTunnels: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaTunnel {
         try await client.transport.get(
-            path: "v1/tunnels/\(tunnelId)",
+            path: "v1/tunnels/\(tunnelId.asPathComponent)",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
         )
@@ -74,7 +74,7 @@ public struct BetaTunnels: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaTunnel {
         try await client.transport.post(
-            path: "v1/tunnels/\(tunnelId)/archive",
+            path: "v1/tunnels/\(tunnelId.asPathComponent)/archive",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
         )
@@ -89,7 +89,7 @@ public struct BetaTunnels: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaTunnelToken {
         try await client.transport.post(
-            path: "v1/tunnels/\(tunnelId)/reveal_token",
+            path: "v1/tunnels/\(tunnelId.asPathComponent)/reveal_token",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
         )
@@ -106,7 +106,7 @@ public struct BetaTunnels: Sendable {
     ) async throws -> BetaTunnelToken {
         try await client.transport.send(
             method: "POST",
-            path: "v1/tunnels/\(tunnelId)/rotate_token",
+            path: "v1/tunnels/\(tunnelId.asPathComponent)/rotate_token",
             query: betaQuery,
             body: params,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)

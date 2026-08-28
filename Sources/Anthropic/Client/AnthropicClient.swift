@@ -30,11 +30,6 @@ public final class AnthropicClient: Sendable {
         let environment = ProcessInfo.processInfo.environment
         let resolvedKey = apiKey ?? environment["ANTHROPIC_API_KEY"]
         let resolvedAuthToken = environment["ANTHROPIC_AUTH_TOKEN"]
-        precondition(
-            authProvider != nil || resolvedKey != nil || resolvedAuthToken != nil,
-            "AnthropicClient needs an apiKey, an authProvider, an ANTHROPIC_API_KEY environment " +
-                "variable, or an ANTHROPIC_AUTH_TOKEN environment variable."
-        )
         self.baseURL = baseURL
         self.defaultHeaders = AnthropicClient.baseDefaultHeaders
         self.maxRetries = maxRetries
@@ -44,8 +39,10 @@ public final class AnthropicClient: Sendable {
             self.authProvider = authProvider
         } else if let resolvedKey {
             self.authProvider = APIKeyProvider(apiKey: resolvedKey)
+        } else if let resolvedAuthToken {
+            self.authProvider = StaticTokenProvider(token: resolvedAuthToken)
         } else {
-            self.authProvider = StaticTokenProvider(token: resolvedAuthToken!)
+            self.authProvider = UnresolvedCredentialsProvider()
         }
     }
 
@@ -132,4 +129,24 @@ public final class AnthropicClient: Sendable {
             authProvider: authProvider
         )
     }
+}
+
+/// Fallback `authProvider` when `AnthropicClient.init` finds no apiKey, authProvider, or credential
+/// environment variable. The plain initializer is documented as never throwing, so the failure is
+/// deferred to the first request instead of crashing the process via `precondition`.
+private struct UnresolvedCredentialsProvider: CredentialProvider {
+    func authHeader() async throws -> (name: String, value: String) {
+        throw AnthropicError.authentication(APIErrorDetail(
+            statusCode: nil,
+            requestID: nil,
+            workspaceID: nil,
+            type: nil,
+            message: "AnthropicClient needs an apiKey, an authProvider, an ANTHROPIC_API_KEY " +
+                "environment variable, or an ANTHROPIC_AUTH_TOKEN environment variable.",
+            body: nil,
+            retryAfter: nil
+        ))
+    }
+
+    func invalidate() async {}
 }

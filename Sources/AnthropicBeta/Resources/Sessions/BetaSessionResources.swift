@@ -27,7 +27,7 @@ public struct BetaSessionResources: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaManagedAgentsSessionResource {
         try await client.transport.get(
-            path: "v1/sessions/\(sessionId)/resources/\(resourceId)",
+            path: "v1/sessions/\(sessionId.asPathComponent)/resources/\(resourceId.asPathComponent)",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
         )
@@ -44,7 +44,7 @@ public struct BetaSessionResources: Sendable {
     ) async throws -> BetaManagedAgentsSessionResource {
         try await client.transport.send(
             method: "POST",
-            path: "v1/sessions/\(sessionId)/resources/\(resourceId)",
+            path: "v1/sessions/\(sessionId.asPathComponent)/resources/\(resourceId.asPathComponent)",
             query: betaQuery,
             body: UpdateBody(authorizationToken: authorizationToken),
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
@@ -60,7 +60,7 @@ public struct BetaSessionResources: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> PageCursor<BetaManagedAgentsSessionResource> {
         try await client.transport.get(
-            path: "v1/sessions/\(sessionId)/resources",
+            path: "v1/sessions/\(sessionId.asPathComponent)/resources",
             query: betaQuery.merging(
                 [
                     "limit": limit.map(String.init),
@@ -79,7 +79,7 @@ public struct BetaSessionResources: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaManagedAgentsDeleteSessionResource {
         try await client.transport.delete(
-            path: "v1/sessions/\(sessionId)/resources/\(resourceId)",
+            path: "v1/sessions/\(sessionId.asPathComponent)/resources/\(resourceId.asPathComponent)",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
         )
@@ -94,7 +94,7 @@ public struct BetaSessionResources: Sendable {
     ) async throws -> BetaManagedAgentsFileResource {
         try await client.transport.send(
             method: "POST",
-            path: "v1/sessions/\(sessionId)/resources",
+            path: "v1/sessions/\(sessionId.asPathComponent)/resources",
             query: betaQuery,
             body: params,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)

@@ -127,10 +127,16 @@ package struct HTTPTransport: Sendable {
     ) async throws -> T {
         let maxRetries = options.maxRetries ?? client.maxRetries
         var attempt = 0
+        var didInvalidateCredentials = false
         while true {
             do {
                 return try await operation()
             } catch let error as AnthropicError {
+                if case .authentication = error, !didInvalidateCredentials {
+                    didInvalidateCredentials = true
+                    await client.authProvider.invalidate()
+                    continue
+                }
                 attempt += 1
                 guard attempt <= maxRetries, error.isRetryable else { throw error }
                 let delay = Self.backoffDelay(attempt: attempt, retryAfter: error.detail?.retryAfter)
@@ -244,6 +250,8 @@ package struct HTTPTransport: Sendable {
             (data, response) = try await client.urlSession.data(for: request)
         } catch let urlError as URLError where urlError.code == .timedOut {
             throw AnthropicError.timeout(message: AnthropicError.defaultTimeoutMessage)
+        } catch let urlError as URLError where urlError.code == .cancelled {
+            throw CancellationError()
         } catch {
             throw AnthropicError.connection(message: AnthropicError.defaultConnectionMessage)
         }
@@ -277,6 +285,8 @@ package struct HTTPTransport: Sendable {
             (bytes, response) = try await client.urlSession.bytes(for: request)
         } catch let urlError as URLError where urlError.code == .timedOut {
             throw AnthropicError.timeout(message: AnthropicError.defaultTimeoutMessage)
+        } catch let urlError as URLError where urlError.code == .cancelled {
+            throw CancellationError()
         } catch {
             throw AnthropicError.connection(message: AnthropicError.defaultConnectionMessage)
         }
@@ -300,8 +310,14 @@ package struct HTTPTransport: Sendable {
             return retryAfter
         }
         let exponential = min(initialRetryDelay * pow(2.0, Double(attempt - 1)), maxRetryDelay)
-        return exponential + exponential * Double.random(in: 0...0.25)
+        return exponential * (1 - Double.random(in: 0...0.25))
     }
+
+    static let pathComponentAllowed: CharacterSet = {
+        var allowed = CharacterSet.urlPathAllowed
+        allowed.remove(charactersIn: "/")
+        return allowed
+    }()
 
     package static let encoder: JSONEncoder = {
         let encoder = JSONEncoder()
@@ -314,4 +330,14 @@ package struct HTTPTransport: Sendable {
         decoder.keyDecodingStrategy = .convertFromSnakeCase
         return decoder
     }()
+}
+
+extension String {
+    /// Percent-encodes this string for safe use as a single URL path segment, escaping `/` (and any
+    /// other character outside `CharacterSet.urlPathAllowed`) so a caller-supplied id containing a
+    /// path separator or `..` can never introduce an extra path segment when interpolated into a
+    /// path template like `"v1/files/\(fileId.asPathComponent)"`.
+    package var asPathComponent: String {
+        addingPercentEncoding(withAllowedCharacters: HTTPTransport.pathComponentAllowed) ?? self
+    }
 }

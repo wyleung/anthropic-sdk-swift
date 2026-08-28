@@ -32,7 +32,7 @@ public struct BetaUserProfiles: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaUserProfile {
         try await client.transport.get(
-            path: "v1/user_profiles/\(userProfileId)",
+            path: "v1/user_profiles/\(userProfileId.asPathComponent)",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
         )
@@ -48,7 +48,7 @@ public struct BetaUserProfiles: Sendable {
     ) async throws -> BetaUserProfile {
         try await client.transport.send(
             method: "POST",
-            path: "v1/user_profiles/\(userProfileId)",
+            path: "v1/user_profiles/\(userProfileId.asPathComponent)",
             query: betaQuery,
             body: params,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
@@ -86,7 +86,7 @@ public struct BetaUserProfiles: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaUserProfileEnrollmentURL {
         try await client.transport.post(
-            path: "v1/user_profiles/\(userProfileId)/enrollment_url",
+            path: "v1/user_profiles/\(userProfileId.asPathComponent)/enrollment_url",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
         )

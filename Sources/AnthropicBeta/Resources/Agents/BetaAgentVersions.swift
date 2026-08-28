@@ -15,7 +15,7 @@ public struct BetaAgentVersions: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> PageCursor<BetaManagedAgentsAgent> {
         try await client.transport.get(
-            path: "v1/agents/\(agentId)/versions",
+            path: "v1/agents/\(agentId.asPathComponent)/versions",
             query: betaQuery.merging(
                 [
                     "limit": limit.map(String.init),

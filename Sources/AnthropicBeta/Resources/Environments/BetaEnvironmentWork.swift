@@ -18,7 +18,7 @@ public struct BetaEnvironmentWork: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaSelfHostedWork {
         try await client.transport.get(
-            path: "v1/environments/\(environmentId)/work/\(workId)",
+            path: "v1/environments/\(environmentId.asPathComponent)/work/\(workId.asPathComponent)",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
         )
@@ -35,7 +35,7 @@ public struct BetaEnvironmentWork: Sendable {
     ) async throws -> BetaSelfHostedWork {
         try await client.transport.send(
             method: "POST",
-            path: "v1/environments/\(environmentId)/work/\(workId)",
+            path: "v1/environments/\(environmentId.asPathComponent)/work/\(workId.asPathComponent)",
             query: betaQuery,
             body: params,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
@@ -51,7 +51,7 @@ public struct BetaEnvironmentWork: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> PageCursor<BetaSelfHostedWork> {
         try await client.transport.get(
-            path: "v1/environments/\(environmentId)/work",
+            path: "v1/environments/\(environmentId.asPathComponent)/work",
             query: betaQuery.merging(
                 [
                     "limit": limit.map(String.init),
@@ -70,7 +70,7 @@ public struct BetaEnvironmentWork: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaSelfHostedWork {
         try await client.transport.post(
-            path: "v1/environments/\(environmentId)/work/\(workId)/ack",
+            path: "v1/environments/\(environmentId.asPathComponent)/work/\(workId.asPathComponent)/ack",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
         )
@@ -90,7 +90,7 @@ public struct BetaEnvironmentWork: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaSelfHostedWorkHeartbeatResponse {
         try await client.transport.post(
-            path: "v1/environments/\(environmentId)/work/\(workId)/heartbeat",
+            path: "v1/environments/\(environmentId.asPathComponent)/work/\(workId.asPathComponent)/heartbeat",
             query: betaQuery.merging(
                 [
                     "desired_ttl_seconds": desiredTtlSeconds.map(String.init),
@@ -117,7 +117,7 @@ public struct BetaEnvironmentWork: Sendable {
             options.headers["Anthropic-Worker-ID"] = workerId
         }
         return try await client.transport.get(
-            path: "v1/environments/\(environmentId)/work/poll",
+            path: "v1/environments/\(environmentId.asPathComponent)/work/poll",
             query: betaQuery.merging(
                 [
                     "block_ms": blockMs.map(String.init),
@@ -135,7 +135,7 @@ public struct BetaEnvironmentWork: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaSelfHostedWorkQueueStats {
         try await client.transport.get(
-            path: "v1/environments/\(environmentId)/work/stats",
+            path: "v1/environments/\(environmentId.asPathComponent)/work/stats",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
         )
@@ -151,7 +151,7 @@ public struct BetaEnvironmentWork: Sendable {
     ) async throws -> BetaSelfHostedWork {
         try await client.transport.send(
             method: "POST",
-            path: "v1/environments/\(environmentId)/work/\(workId)/stop",
+            path: "v1/environments/\(environmentId.asPathComponent)/work/\(workId.asPathComponent)/stop",
             query: betaQuery,
             body: BetaWorkStopParams(force: force),
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)

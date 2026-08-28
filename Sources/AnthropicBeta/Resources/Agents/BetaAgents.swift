@@ -33,7 +33,7 @@ public struct BetaAgents: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaManagedAgentsAgent {
         try await client.transport.get(
-            path: "v1/agents/\(agentId)",
+            path: "v1/agents/\(agentId.asPathComponent)",
             query: betaQuery.merging(["version": version.map(String.init)]) { _, new in new },
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
         )
@@ -49,7 +49,7 @@ public struct BetaAgents: Sendable {
     ) async throws -> BetaManagedAgentsAgent {
         try await client.transport.send(
             method: "POST",
-            path: "v1/agents/\(agentId)",
+            path: "v1/agents/\(agentId.asPathComponent)",
             query: betaQuery,
             body: params,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
@@ -90,7 +90,7 @@ public struct BetaAgents: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaManagedAgentsAgent {
         try await client.transport.post(
-            path: "v1/agents/\(agentId)/archive",
+            path: "v1/agents/\(agentId.asPathComponent)/archive",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
         )

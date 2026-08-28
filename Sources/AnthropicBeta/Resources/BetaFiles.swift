@@ -34,7 +34,7 @@ public struct BetaFiles: Sendable {
         _ fileId: String, betas: [String] = [], options: RequestOptions = RequestOptions()
     ) async throws -> BetaDeletedFile {
         try await client.transport.delete(
-            path: "v1/files/\(fileId)",
+            path: "v1/files/\(fileId.asPathComponent)",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: "files-api-2025-04-14", base: options)
         )
@@ -46,7 +46,7 @@ public struct BetaFiles: Sendable {
         _ fileId: String, betas: [String] = [], options: RequestOptions = RequestOptions()
     ) async throws -> Data {
         try await client.transport.getData(
-            path: "v1/files/\(fileId)/content",
+            path: "v1/files/\(fileId.asPathComponent)/content",
             query: betaQuery,
             accept: "application/binary",
             options: betaRequestOptions(betas: betas, requiredBeta: "files-api-2025-04-14", base: options)
@@ -57,7 +57,7 @@ public struct BetaFiles: Sendable {
         _ fileId: String, betas: [String] = [], options: RequestOptions = RequestOptions()
     ) async throws -> BetaFileMetadata {
         try await client.transport.get(
-            path: "v1/files/\(fileId)",
+            path: "v1/files/\(fileId.asPathComponent)",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: "files-api-2025-04-14", base: options)
         )

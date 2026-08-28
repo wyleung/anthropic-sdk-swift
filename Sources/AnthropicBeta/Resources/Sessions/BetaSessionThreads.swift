@@ -18,7 +18,7 @@ public struct BetaSessionThreads: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaManagedAgentsSessionThread {
         try await client.transport.get(
-            path: "v1/sessions/\(sessionId)/threads/\(threadId)",
+            path: "v1/sessions/\(sessionId.asPathComponent)/threads/\(threadId.asPathComponent)",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
         )
@@ -33,7 +33,7 @@ public struct BetaSessionThreads: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> PageCursor<BetaManagedAgentsSessionThread> {
         try await client.transport.get(
-            path: "v1/sessions/\(sessionId)/threads",
+            path: "v1/sessions/\(sessionId.asPathComponent)/threads",
             query: betaQuery.merging(
                 [
                     "limit": limit.map(String.init),
@@ -52,7 +52,7 @@ public struct BetaSessionThreads: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaManagedAgentsSessionThread {
         try await client.transport.post(
-            path: "v1/sessions/\(sessionId)/threads/\(threadId)/archive",
+            path: "v1/sessions/\(sessionId.asPathComponent)/threads/\(threadId.asPathComponent)/archive",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
         )

@@ -15,7 +15,7 @@ public struct BetaDeploymentRuns: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaManagedAgentsDeploymentRun {
         try await client.transport.get(
-            path: "v1/deployment_runs/\(deploymentRunId)",
+            path: "v1/deployment_runs/\(deploymentRunId.asPathComponent)",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
         )

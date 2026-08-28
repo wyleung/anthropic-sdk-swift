@@ -420,4 +420,38 @@ final class BetaSessionToolRunnerTests: XCTestCase {
         XCTAssertEqual(events.first?["custom_tool_use_id"] as? String, "ctu_1")
         XCTAssertNil(events.first?["tool_use_id"])
     }
+
+    /// Regression test for the `consumerWalkedAway()` fix: with no `session.status_terminated`
+    /// (or any other stop-triggering) event ever arriving, `streamLoop` reconnects forever with
+    /// exponential backoff -- the only thing that can end `run()`'s stream is the consumer itself
+    /// giving up. Before the fix, cancelling the consuming `Task` had no effect on the runner's
+    /// internal loop and this would hang until the test suite's own timeout.
+    func testCancellingTheConsumingTaskEndsTheStreamPromptlyEvenThoughTheRunnerKeepsReconnecting() async throws {
+        let router = SessionRouter(listFixture: Self.emptyList, streamFixture: Self.sse([]))
+        let runner = makeRunner(router)
+
+        let consumer = Task {
+            for try await _ in await runner.run() {}
+        }
+
+        // Let the runner connect, see an empty stream, and start (or enter) its reconnect backoff.
+        try await Task.sleep(nanoseconds: 100_000_000)
+        consumer.cancel()
+
+        let finishedInTime = await withTaskGroup(of: Bool.self) { group in
+            group.addTask {
+                _ = try? await consumer.value
+                return true
+            }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                return false
+            }
+            let firstResult = await group.next()!
+            group.cancelAll()
+            return firstResult
+        }
+
+        XCTAssertTrue(finishedInTime, "run() should terminate promptly once the consumer walks away")
+    }
 }

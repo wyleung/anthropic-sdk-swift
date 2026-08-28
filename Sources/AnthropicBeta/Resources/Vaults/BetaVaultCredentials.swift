@@ -22,7 +22,7 @@ public struct BetaVaultCredentials: Sendable {
     ) async throws -> BetaManagedAgentsCredential {
         try await client.transport.send(
             method: "POST",
-            path: "v1/vaults/\(vaultId)/credentials",
+            path: "v1/vaults/\(vaultId.asPathComponent)/credentials",
             query: betaQuery,
             body: params,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
@@ -37,7 +37,7 @@ public struct BetaVaultCredentials: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaManagedAgentsCredential {
         try await client.transport.get(
-            path: "v1/vaults/\(vaultId)/credentials/\(credentialId)",
+            path: "v1/vaults/\(vaultId.asPathComponent)/credentials/\(credentialId.asPathComponent)",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
         )
@@ -54,7 +54,7 @@ public struct BetaVaultCredentials: Sendable {
     ) async throws -> BetaManagedAgentsCredential {
         try await client.transport.send(
             method: "POST",
-            path: "v1/vaults/\(vaultId)/credentials/\(credentialId)",
+            path: "v1/vaults/\(vaultId.asPathComponent)/credentials/\(credentialId.asPathComponent)",
             query: betaQuery,
             body: params,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
@@ -71,7 +71,7 @@ public struct BetaVaultCredentials: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> PageCursor<BetaManagedAgentsCredential> {
         try await client.transport.get(
-            path: "v1/vaults/\(vaultId)/credentials",
+            path: "v1/vaults/\(vaultId.asPathComponent)/credentials",
             query: betaQuery.merging(
                 [
                     "include_archived": includeArchived.map { $0 ? "true" : "false" },
@@ -91,7 +91,7 @@ public struct BetaVaultCredentials: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaManagedAgentsDeletedCredential {
         try await client.transport.delete(
-            path: "v1/vaults/\(vaultId)/credentials/\(credentialId)",
+            path: "v1/vaults/\(vaultId.asPathComponent)/credentials/\(credentialId.asPathComponent)",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
         )
@@ -105,7 +105,7 @@ public struct BetaVaultCredentials: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaManagedAgentsCredential {
         try await client.transport.post(
-            path: "v1/vaults/\(vaultId)/credentials/\(credentialId)/archive",
+            path: "v1/vaults/\(vaultId.asPathComponent)/credentials/\(credentialId.asPathComponent)/archive",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
         )
@@ -120,7 +120,7 @@ public struct BetaVaultCredentials: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaManagedAgentsCredentialValidation {
         try await client.transport.post(
-            path: "v1/vaults/\(vaultId)/credentials/\(credentialId)/mcp_oauth_validate",
+            path: "v1/vaults/\(vaultId.asPathComponent)/credentials/\(credentialId.asPathComponent)/mcp_oauth_validate",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
         )

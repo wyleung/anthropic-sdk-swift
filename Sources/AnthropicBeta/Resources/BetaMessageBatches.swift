@@ -37,7 +37,7 @@ public struct BetaMessageBatches: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaMessageBatch {
         try await client.transport.get(
-            path: "v1/messages/batches/\(messageBatchId)",
+            path: "v1/messages/batches/\(messageBatchId.asPathComponent)",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: "message-batches-2024-09-24", base: options)
         )
@@ -72,7 +72,7 @@ public struct BetaMessageBatches: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaDeletedMessageBatch {
         try await client.transport.delete(
-            path: "v1/messages/batches/\(messageBatchId)",
+            path: "v1/messages/batches/\(messageBatchId.asPathComponent)",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: "message-batches-2024-09-24", base: options)
         )
@@ -85,7 +85,7 @@ public struct BetaMessageBatches: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaMessageBatch {
         try await client.transport.post(
-            path: "v1/messages/batches/\(messageBatchId)/cancel",
+            path: "v1/messages/batches/\(messageBatchId.asPathComponent)/cancel",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: "message-batches-2024-09-24", base: options)
         )

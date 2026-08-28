@@ -32,7 +32,7 @@ public struct BetaSessions: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaManagedAgentsSession {
         try await client.transport.get(
-            path: "v1/sessions/\(sessionId)",
+            path: "v1/sessions/\(sessionId.asPathComponent)",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
         )
@@ -50,7 +50,7 @@ public struct BetaSessions: Sendable {
     ) async throws -> BetaManagedAgentsSession {
         try await client.transport.send(
             method: "POST",
-            path: "v1/sessions/\(sessionId)",
+            path: "v1/sessions/\(sessionId.asPathComponent)",
             query: betaQuery,
             body: params,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
@@ -109,7 +109,7 @@ public struct BetaSessions: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaManagedAgentsDeletedSession {
         try await client.transport.delete(
-            path: "v1/sessions/\(sessionId)",
+            path: "v1/sessions/\(sessionId.asPathComponent)",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
         )
@@ -122,7 +122,7 @@ public struct BetaSessions: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaManagedAgentsSession {
         try await client.transport.post(
-            path: "v1/sessions/\(sessionId)/archive",
+            path: "v1/sessions/\(sessionId.asPathComponent)/archive",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
         )

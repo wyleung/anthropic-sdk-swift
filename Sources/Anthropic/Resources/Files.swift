@@ -20,7 +20,7 @@ public struct Files: Sendable {
     }
 
     public func delete(_ fileId: String, options: RequestOptions = RequestOptions()) async throws -> DeletedFile {
-        try await client.transport.delete(path: "v1/files/\(fileId)", options: options)
+        try await client.transport.delete(path: "v1/files/\(fileId.asPathComponent)", options: options)
     }
 
     /// Returns the raw file bytes. The reference SDKs expose a `BinaryAPIResponse` wrapper with
@@ -28,14 +28,14 @@ public struct Files: Sendable {
     /// stance of not yet modeling a dedicated streaming-binary-response type.
     public func download(_ fileId: String, options: RequestOptions = RequestOptions()) async throws -> Data {
         try await client.transport.getData(
-            path: "v1/files/\(fileId)/content", accept: "application/binary", options: options
+            path: "v1/files/\(fileId.asPathComponent)/content", accept: "application/binary", options: options
         )
     }
 
     public func retrieveMetadata(
         _ fileId: String, options: RequestOptions = RequestOptions()
     ) async throws -> FileMetadata {
-        try await client.transport.get(path: "v1/files/\(fileId)", options: options)
+        try await client.transport.get(path: "v1/files/\(fileId.asPathComponent)", options: options)
     }
 
     /// - Parameters:

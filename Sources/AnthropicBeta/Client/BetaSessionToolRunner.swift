@@ -139,6 +139,7 @@ public actor SessionToolRunner {
     private let workStream: AsyncStream<WorkItem>
     private let workContinuation: AsyncStream<WorkItem>.Continuation
     private var outputContinuation: AsyncThrowingStream<DispatchedToolCall, Error>.Continuation?
+    private var runTask: Task<Void, Never>?
 
     /// Reuses `HTTPTransport`'s own initial-delay/cap for exponential backoff, since Python's
     /// reconnect loop doesn't specify a distinct pair and this keeps every retry loop in the SDK
@@ -183,12 +184,26 @@ public actor SessionToolRunner {
     public func run() -> AsyncThrowingStream<DispatchedToolCall, Error> {
         AsyncThrowingStream { continuation in
             continuation.onTermination = { _ in
-                Task { await self.stop() }
+                Task { await self.consumerWalkedAway() }
             }
-            Task {
+            runTask = Task {
                 await self.start(continuation: continuation)
             }
         }
+    }
+
+    /// `onTermination` fires whenever the stream reaches a terminal state -- both when the consumer
+    /// abandons it (stops iterating, or its `Task` is cancelled) *and* when `start()` finishes the
+    /// stream normally via `continuation.finish()`. Only the former needs `runTask` force-cancelled:
+    /// that's what actually unblocks `streamLoop`'s blocking `for try await event in stream` when
+    /// it's parked on an idle SSE connection with no consumer left to deliver events to. Calling
+    /// `.cancel()` after a normal finish is harmless (by then `runTask`'s work is already done), but
+    /// routing every internal `stop()` call site (non-retryable error, session-terminated, idle
+    /// timeout) through this same cancelling path would abort sibling tasks -- e.g. `dispatchLoop`
+    /// mid-POST of a tool result -- still finishing their own graceful shutdown.
+    private func consumerWalkedAway() {
+        stop()
+        runTask?.cancel()
     }
 
     private func start(continuation: AsyncThrowingStream<DispatchedToolCall, Error>.Continuation) async {

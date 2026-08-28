@@ -26,7 +26,7 @@ public struct BetaMemories: Sendable {
     ) async throws -> BetaManagedAgentsMemory {
         try await client.transport.send(
             method: "POST",
-            path: "v1/memory_stores/\(memoryStoreId)/memories",
+            path: "v1/memory_stores/\(memoryStoreId.asPathComponent)/memories",
             query: betaQuery.merging(["view": view]) { _, new in new },
             body: params,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
@@ -42,7 +42,7 @@ public struct BetaMemories: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaManagedAgentsMemory {
         try await client.transport.get(
-            path: "v1/memory_stores/\(memoryStoreId)/memories/\(memoryId)",
+            path: "v1/memory_stores/\(memoryStoreId.asPathComponent)/memories/\(memoryId.asPathComponent)",
             query: betaQuery.merging(["view": view]) { _, new in new },
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
         )
@@ -61,7 +61,7 @@ public struct BetaMemories: Sendable {
     ) async throws -> BetaManagedAgentsMemory {
         try await client.transport.send(
             method: "POST",
-            path: "v1/memory_stores/\(memoryStoreId)/memories/\(memoryId)",
+            path: "v1/memory_stores/\(memoryStoreId.asPathComponent)/memories/\(memoryId.asPathComponent)",
             query: betaQuery.merging(["view": view]) { _, new in new },
             body: params,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
@@ -83,7 +83,7 @@ public struct BetaMemories: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> PageCursor<BetaManagedAgentsMemoryListItem> {
         try await client.transport.get(
-            path: "v1/memory_stores/\(memoryStoreId)/memories",
+            path: "v1/memory_stores/\(memoryStoreId.asPathComponent)/memories",
             query: betaQuery.merging(
                 [
                     "depth": depth.map(String.init),
@@ -108,7 +108,7 @@ public struct BetaMemories: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaManagedAgentsDeletedMemory {
         try await client.transport.delete(
-            path: "v1/memory_stores/\(memoryStoreId)/memories/\(memoryId)",
+            path: "v1/memory_stores/\(memoryStoreId.asPathComponent)/memories/\(memoryId.asPathComponent)",
             query: betaQuery.merging(["expected_content_sha256": expectedContentSha256]) { _, new in new },
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
         )

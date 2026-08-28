@@ -34,7 +34,7 @@ public struct MessageBatches: Sendable {
         _ messageBatchId: String,
         options: RequestOptions = RequestOptions()
     ) async throws -> MessageBatch {
-        try await client.transport.get(path: "v1/messages/batches/\(messageBatchId)", options: options)
+        try await client.transport.get(path: "v1/messages/batches/\(messageBatchId.asPathComponent)", options: options)
     }
 
     /// List all Message Batches within a Workspace, most recently created first.
@@ -61,7 +61,7 @@ public struct MessageBatches: Sendable {
         _ messageBatchId: String,
         options: RequestOptions = RequestOptions()
     ) async throws -> DeletedMessageBatch {
-        try await client.transport.delete(path: "v1/messages/batches/\(messageBatchId)", options: options)
+        try await client.transport.delete(path: "v1/messages/batches/\(messageBatchId.asPathComponent)", options: options)
     }
 
     /// Cancel a batch any time before processing ends; the batch enters a `canceling` state.
@@ -70,7 +70,7 @@ public struct MessageBatches: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> MessageBatch {
         try await client.transport.post(
-            path: "v1/messages/batches/\(messageBatchId)/cancel",
+            path: "v1/messages/batches/\(messageBatchId.asPathComponent)/cancel",
             options: options
         )
     }

@@ -31,7 +31,7 @@ public struct BetaEnvironments: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaEnvironment {
         try await client.transport.get(
-            path: "v1/environments/\(environmentId)",
+            path: "v1/environments/\(environmentId.asPathComponent)",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
         )
@@ -47,7 +47,7 @@ public struct BetaEnvironments: Sendable {
     ) async throws -> BetaEnvironment {
         try await client.transport.send(
             method: "POST",
-            path: "v1/environments/\(environmentId)",
+            path: "v1/environments/\(environmentId.asPathComponent)",
             query: betaQuery,
             body: params,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
@@ -82,7 +82,7 @@ public struct BetaEnvironments: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaEnvironmentDeleteResponse {
         try await client.transport.delete(
-            path: "v1/environments/\(environmentId)",
+            path: "v1/environments/\(environmentId.asPathComponent)",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
         )
@@ -95,7 +95,7 @@ public struct BetaEnvironments: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaEnvironment {
         try await client.transport.post(
-            path: "v1/environments/\(environmentId)/archive",
+            path: "v1/environments/\(environmentId.asPathComponent)/archive",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
         )

@@ -26,7 +26,7 @@ public struct BetaMemoryVersions: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaManagedAgentsMemoryVersion {
         try await client.transport.get(
-            path: "v1/memory_stores/\(memoryStoreId)/memory_versions/\(memoryVersionId)",
+            path: "v1/memory_stores/\(memoryStoreId.asPathComponent)/memory_versions/\(memoryVersionId.asPathComponent)",
             query: betaQuery.merging(["view": view]) { _, new in new },
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
         )
@@ -51,7 +51,7 @@ public struct BetaMemoryVersions: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> PageCursor<BetaManagedAgentsMemoryVersion> {
         try await client.transport.get(
-            path: "v1/memory_stores/\(memoryStoreId)/memory_versions",
+            path: "v1/memory_stores/\(memoryStoreId.asPathComponent)/memory_versions",
             query: betaQuery.merging(
                 [
                     "api_key_id": apiKeyId,
@@ -79,7 +79,7 @@ public struct BetaMemoryVersions: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaManagedAgentsMemoryVersion {
         try await client.transport.post(
-            path: "v1/memory_stores/\(memoryStoreId)/memory_versions/\(memoryVersionId)/redact",
+            path: "v1/memory_stores/\(memoryStoreId.asPathComponent)/memory_versions/\(memoryVersionId.asPathComponent)/redact",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
         )

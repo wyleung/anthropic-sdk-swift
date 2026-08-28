@@ -31,7 +31,7 @@ public struct BetaDeployments: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaManagedAgentsDeployment {
         try await client.transport.get(
-            path: "v1/deployments/\(deploymentId)",
+            path: "v1/deployments/\(deploymentId.asPathComponent)",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
         )
@@ -47,7 +47,7 @@ public struct BetaDeployments: Sendable {
     ) async throws -> BetaManagedAgentsDeployment {
         try await client.transport.send(
             method: "POST",
-            path: "v1/deployments/\(deploymentId)",
+            path: "v1/deployments/\(deploymentId.asPathComponent)",
             query: betaQuery,
             body: params,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
@@ -94,7 +94,7 @@ public struct BetaDeployments: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaManagedAgentsDeployment {
         try await client.transport.post(
-            path: "v1/deployments/\(deploymentId)/archive",
+            path: "v1/deployments/\(deploymentId.asPathComponent)/archive",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
         )
@@ -107,7 +107,7 @@ public struct BetaDeployments: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaManagedAgentsDeployment {
         try await client.transport.post(
-            path: "v1/deployments/\(deploymentId)/pause",
+            path: "v1/deployments/\(deploymentId.asPathComponent)/pause",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
         )
@@ -120,7 +120,7 @@ public struct BetaDeployments: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaManagedAgentsDeployment {
         try await client.transport.post(
-            path: "v1/deployments/\(deploymentId)/unpause",
+            path: "v1/deployments/\(deploymentId.asPathComponent)/unpause",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
         )
@@ -133,7 +133,7 @@ public struct BetaDeployments: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaManagedAgentsDeploymentRun {
         try await client.transport.post(
-            path: "v1/deployments/\(deploymentId)/run",
+            path: "v1/deployments/\(deploymentId.asPathComponent)/run",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
         )

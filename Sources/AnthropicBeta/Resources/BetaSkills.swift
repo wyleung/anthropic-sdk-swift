@@ -33,7 +33,7 @@ public struct BetaSkills: Sendable {
         _ skillId: String, betas: [String] = [], options: RequestOptions = RequestOptions()
     ) async throws -> BetaSkillSummary {
         try await client.transport.get(
-            path: "v1/skills/\(skillId)",
+            path: "v1/skills/\(skillId.asPathComponent)",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: "skills-2025-10-02", base: options)
         )
@@ -59,7 +59,7 @@ public struct BetaSkills: Sendable {
         _ skillId: String, betas: [String] = [], options: RequestOptions = RequestOptions()
     ) async throws -> BetaDeletedSkill {
         try await client.transport.delete(
-            path: "v1/skills/\(skillId)",
+            path: "v1/skills/\(skillId.asPathComponent)",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: "skills-2025-10-02", base: options)
         )
@@ -82,7 +82,7 @@ public struct BetaSkillVersions: Sendable {
             multipart.addFile(name: "files", filename: file.filename, contentType: file.contentType, data: file.data)
         }
         return try await client.transport.postMultipart(
-            path: "v1/skills/\(skillId)/versions",
+            path: "v1/skills/\(skillId.asPathComponent)/versions",
             query: betaQuery,
             multipart: multipart,
             options: betaRequestOptions(betas: betas, requiredBeta: "skills-2025-10-02", base: options)
@@ -97,7 +97,7 @@ public struct BetaSkillVersions: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaSkillVersion {
         try await client.transport.get(
-            path: "v1/skills/\(skillId)/versions/\(version)",
+            path: "v1/skills/\(skillId.asPathComponent)/versions/\(version.asPathComponent)",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: "skills-2025-10-02", base: options)
         )
@@ -111,7 +111,7 @@ public struct BetaSkillVersions: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> PageCursor<BetaSkillVersion> {
         try await client.transport.get(
-            path: "v1/skills/\(skillId)/versions",
+            path: "v1/skills/\(skillId.asPathComponent)/versions",
             query: betaQuery.merging(["limit": limit.map(String.init), "page": page]) { _, new in new },
             options: betaRequestOptions(betas: betas, requiredBeta: "skills-2025-10-02", base: options)
         )
@@ -125,7 +125,7 @@ public struct BetaSkillVersions: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaDeletedSkillVersion {
         try await client.transport.delete(
-            path: "v1/skills/\(skillId)/versions/\(version)",
+            path: "v1/skills/\(skillId.asPathComponent)/versions/\(version.asPathComponent)",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: "skills-2025-10-02", base: options)
         )

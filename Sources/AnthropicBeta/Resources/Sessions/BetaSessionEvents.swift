@@ -30,7 +30,7 @@ public struct BetaSessionEvents: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> PageCursor<BetaManagedAgentsSessionEvent> {
         try await client.transport.get(
-            path: "v1/sessions/\(sessionId)/events",
+            path: "v1/sessions/\(sessionId.asPathComponent)/events",
             query: betaQuery.merging(
                 [
                     "created_at[gt]": createdAtGt,
@@ -56,7 +56,7 @@ public struct BetaSessionEvents: Sendable {
     ) async throws -> BetaManagedAgentsSendSessionEvents {
         try await client.transport.send(
             method: "POST",
-            path: "v1/sessions/\(sessionId)/events",
+            path: "v1/sessions/\(sessionId.asPathComponent)/events",
             query: betaQuery,
             body: BetaSessionEventSendParams(events: events),
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
@@ -77,7 +77,7 @@ public struct BetaSessionEvents: Sendable {
     ) async throws -> AsyncThrowingStream<BetaManagedAgentsStreamSessionEvents, Error> {
         let (response, sse) = try await client.transport.stream(
             method: "GET",
-            path: "v1/sessions/\(sessionId)/events/stream",
+            path: "v1/sessions/\(sessionId.asPathComponent)/events/stream",
             query: betaQuery,
             arrayQuery: ["event_deltas": eventDeltas],
             body: Data(),

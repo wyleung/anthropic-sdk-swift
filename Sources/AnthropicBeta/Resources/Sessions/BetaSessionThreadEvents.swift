@@ -22,7 +22,7 @@ public struct BetaSessionThreadEvents: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> PageCursor<BetaManagedAgentsSessionEvent> {
         try await client.transport.get(
-            path: "v1/sessions/\(sessionId)/threads/\(threadId)/events",
+            path: "v1/sessions/\(sessionId.asPathComponent)/threads/\(threadId.asPathComponent)/events",
             query: betaQuery.merging(
                 [
                     "limit": limit.map(String.init),
@@ -45,7 +45,7 @@ public struct BetaSessionThreadEvents: Sendable {
     ) async throws -> AsyncThrowingStream<BetaManagedAgentsStreamSessionThreadEvents, Error> {
         let (response, sse) = try await client.transport.stream(
             method: "GET",
-            path: "v1/sessions/\(sessionId)/threads/\(threadId)/stream",
+            path: "v1/sessions/\(sessionId.asPathComponent)/threads/\(threadId.asPathComponent)/stream",
             query: betaQuery,
             arrayQuery: ["event_deltas": eventDeltas],
             body: Data(),

@@ -31,7 +31,7 @@ public struct BetaMemoryStores: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaManagedAgentsMemoryStore {
         try await client.transport.get(
-            path: "v1/memory_stores/\(memoryStoreId)",
+            path: "v1/memory_stores/\(memoryStoreId.asPathComponent)",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
         )
@@ -47,7 +47,7 @@ public struct BetaMemoryStores: Sendable {
     ) async throws -> BetaManagedAgentsMemoryStore {
         try await client.transport.send(
             method: "POST",
-            path: "v1/memory_stores/\(memoryStoreId)",
+            path: "v1/memory_stores/\(memoryStoreId.asPathComponent)",
             query: betaQuery,
             body: params,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
@@ -88,7 +88,7 @@ public struct BetaMemoryStores: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaManagedAgentsDeletedMemoryStore {
         try await client.transport.delete(
-            path: "v1/memory_stores/\(memoryStoreId)",
+            path: "v1/memory_stores/\(memoryStoreId.asPathComponent)",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
         )
@@ -101,7 +101,7 @@ public struct BetaMemoryStores: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaManagedAgentsMemoryStore {
         try await client.transport.post(
-            path: "v1/memory_stores/\(memoryStoreId)/archive",
+            path: "v1/memory_stores/\(memoryStoreId.asPathComponent)/archive",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
         )

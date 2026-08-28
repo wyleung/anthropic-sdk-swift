@@ -31,7 +31,7 @@ public struct BetaVaults: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaManagedAgentsVault {
         try await client.transport.get(
-            path: "v1/vaults/\(vaultId)",
+            path: "v1/vaults/\(vaultId.asPathComponent)",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
         )
@@ -47,7 +47,7 @@ public struct BetaVaults: Sendable {
     ) async throws -> BetaManagedAgentsVault {
         try await client.transport.send(
             method: "POST",
-            path: "v1/vaults/\(vaultId)",
+            path: "v1/vaults/\(vaultId.asPathComponent)",
             query: betaQuery,
             body: params,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
@@ -82,7 +82,7 @@ public struct BetaVaults: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaManagedAgentsDeletedVault {
         try await client.transport.delete(
-            path: "v1/vaults/\(vaultId)",
+            path: "v1/vaults/\(vaultId.asPathComponent)",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
         )
@@ -95,7 +95,7 @@ public struct BetaVaults: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaManagedAgentsVault {
         try await client.transport.post(
-            path: "v1/vaults/\(vaultId)/archive",
+            path: "v1/vaults/\(vaultId.asPathComponent)/archive",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
         )

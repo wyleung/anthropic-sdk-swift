@@ -19,12 +19,14 @@ public final class MessageStream: Sendable {
             var accumulator = MessageAccumulator()
             do {
                 for try await sseEvent in sse {
+                    try Task.checkCancellation()
                     guard let raw = try MessagesSSE.translate(sseEvent, response: response) else { continue }
                     let snapshot = try accumulator.accumulate(raw)
                     for event in try buildMessageStreamEvents(for: raw, snapshot: snapshot) {
                         await broadcast.publish(event)
                     }
                 }
+                try Task.checkCancellation()
             } catch {
                 await broadcast.finish(throwing: error)
                 throw error

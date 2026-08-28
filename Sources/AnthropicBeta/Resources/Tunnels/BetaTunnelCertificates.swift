@@ -24,7 +24,7 @@ public struct BetaTunnelCertificates: Sendable {
     ) async throws -> BetaTunnelCertificate {
         try await client.transport.send(
             method: "POST",
-            path: "v1/tunnels/\(tunnelId)/certificates",
+            path: "v1/tunnels/\(tunnelId.asPathComponent)/certificates",
             query: betaQuery,
             body: params,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
@@ -39,7 +39,7 @@ public struct BetaTunnelCertificates: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaTunnelCertificate {
         try await client.transport.get(
-            path: "v1/tunnels/\(tunnelId)/certificates/\(certificateId)",
+            path: "v1/tunnels/\(tunnelId.asPathComponent)/certificates/\(certificateId.asPathComponent)",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
         )
@@ -56,7 +56,7 @@ public struct BetaTunnelCertificates: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> PageCursor<BetaTunnelCertificate> {
         try await client.transport.get(
-            path: "v1/tunnels/\(tunnelId)/certificates",
+            path: "v1/tunnels/\(tunnelId.asPathComponent)/certificates",
             query: betaQuery.merging(
                 [
                     "include_archived": includeArchived.map { $0 ? "true" : "false" },
@@ -78,7 +78,7 @@ public struct BetaTunnelCertificates: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaTunnelCertificate {
         try await client.transport.post(
-            path: "v1/tunnels/\(tunnelId)/certificates/\(certificateId)/archive",
+            path: "v1/tunnels/\(tunnelId.asPathComponent)/certificates/\(certificateId.asPathComponent)/archive",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
         )

@@ -8,7 +8,7 @@ public struct Models: Sendable {
         _ modelId: String,
         options: RequestOptions = RequestOptions()
     ) async throws -> ModelInfo {
-        try await client.transport.get(path: "v1/models/\(modelId)", options: options)
+        try await client.transport.get(path: "v1/models/\(modelId.asPathComponent)", options: options)
     }
 
     /// List available models, most recently released first.

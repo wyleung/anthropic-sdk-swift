@@ -10,7 +10,7 @@ public struct BetaModels: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaModelInfo {
         try await client.transport.get(
-            path: "v1/models/\(modelId)",
+            path: "v1/models/\(modelId.asPathComponent)",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, base: options)
         )

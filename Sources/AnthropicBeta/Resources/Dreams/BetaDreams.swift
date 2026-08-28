@@ -31,7 +31,7 @@ public struct BetaDreams: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaDream {
         try await client.transport.get(
-            path: "v1/dreams/\(dreamId)",
+            path: "v1/dreams/\(dreamId.asPathComponent)",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
         )
@@ -75,7 +75,7 @@ public struct BetaDreams: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaDream {
         try await client.transport.post(
-            path: "v1/dreams/\(dreamId)/archive",
+            path: "v1/dreams/\(dreamId.asPathComponent)/archive",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
         )
@@ -88,7 +88,7 @@ public struct BetaDreams: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaDream {
         try await client.transport.post(
-            path: "v1/dreams/\(dreamId)/cancel",
+            path: "v1/dreams/\(dreamId.asPathComponent)/cancel",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
         )

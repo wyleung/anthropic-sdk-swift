@@ -15,7 +15,7 @@ package struct MultipartFormData {
     package mutating func addField(name: String, value: String) {
         var part = Data()
         part.append(contentsOf: "--\(boundary)\r\n".utf8)
-        part.append(contentsOf: "Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n".utf8)
+        part.append(contentsOf: "Content-Disposition: form-data; name=\"\(Self.escape(name))\"\r\n\r\n".utf8)
         part.append(contentsOf: value.utf8)
         part.append(contentsOf: "\r\n".utf8)
         parts.append(part)
@@ -25,12 +25,25 @@ package struct MultipartFormData {
         var part = Data()
         part.append(contentsOf: "--\(boundary)\r\n".utf8)
         part.append(
-            contentsOf: "Content-Disposition: form-data; name=\"\(name)\"; filename=\"\(filename)\"\r\n".utf8
+            contentsOf: """
+            Content-Disposition: form-data; name="\(Self.escape(name))"; filename="\(Self.escape(filename))"\r\n
+            """.utf8
         )
         part.append(contentsOf: "Content-Type: \(contentType)\r\n\r\n".utf8)
         part.append(data)
         part.append(contentsOf: "\r\n".utf8)
         parts.append(part)
+    }
+
+    /// Escapes a `name`/`filename` for safe use inside a quoted `Content-Disposition` header value:
+    /// `"` is backslash-escaped (matching the reference SDKs' quoting behavior) and CR/LF are
+    /// stripped outright, since a raw newline would let a caller-supplied filename inject an
+    /// arbitrary extra header or part boundary into the multipart body.
+    private static func escape(_ s: String) -> String {
+        s.replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+            .replacingOccurrences(of: "\r", with: "")
+            .replacingOccurrences(of: "\n", with: "")
     }
 
     func encode() -> Data {

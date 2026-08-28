@@ -36,7 +36,7 @@ public struct Skills: Sendable {
     }
 
     public func retrieve(_ skillId: String, options: RequestOptions = RequestOptions()) async throws -> Skill {
-        try await client.transport.get(path: "v1/skills/\(skillId)", options: options)
+        try await client.transport.get(path: "v1/skills/\(skillId.asPathComponent)", options: options)
     }
 
     public func list(
@@ -53,7 +53,7 @@ public struct Skills: Sendable {
     }
 
     public func delete(_ skillId: String, options: RequestOptions = RequestOptions()) async throws -> DeletedSkill {
-        try await client.transport.delete(path: "v1/skills/\(skillId)", options: options)
+        try await client.transport.delete(path: "v1/skills/\(skillId.asPathComponent)", options: options)
     }
 }
 
@@ -73,7 +73,7 @@ public struct SkillVersions: Sendable {
             multipart.addFile(name: "files", filename: file.filename, contentType: file.contentType, data: file.data)
         }
         return try await client.transport.postMultipart(
-            path: "v1/skills/\(skillId)/versions", multipart: multipart, options: options
+            path: "v1/skills/\(skillId.asPathComponent)/versions", multipart: multipart, options: options
         )
     }
 
@@ -83,7 +83,7 @@ public struct SkillVersions: Sendable {
         skillId: String,
         options: RequestOptions = RequestOptions()
     ) async throws -> SkillVersion {
-        try await client.transport.get(path: "v1/skills/\(skillId)/versions/\(version)", options: options)
+        try await client.transport.get(path: "v1/skills/\(skillId.asPathComponent)/versions/\(version.asPathComponent)", options: options)
     }
 
     public func list(
@@ -93,7 +93,7 @@ public struct SkillVersions: Sendable {
         options: RequestOptions = RequestOptions()
     ) async throws -> PageCursor<SkillVersion> {
         try await client.transport.get(
-            path: "v1/skills/\(skillId)/versions",
+            path: "v1/skills/\(skillId.asPathComponent)/versions",
             query: ["limit": limit.map(String.init), "page": page],
             options: options
         )
@@ -105,7 +105,7 @@ public struct SkillVersions: Sendable {
         skillId: String,
         options: RequestOptions = RequestOptions()
     ) async throws -> DeletedSkillVersion {
-        try await client.transport.delete(path: "v1/skills/\(skillId)/versions/\(version)", options: options)
+        try await client.transport.delete(path: "v1/skills/\(skillId.asPathComponent)/versions/\(version.asPathComponent)", options: options)
     }
 }
 
