@@ -7,6 +7,10 @@ This SDK is hand-ported from the official [Python](https://github.com/anthropics
 3. If it's a discriminated union (a `type`-tagged variant), model it as a Swift `enum` with associated values and a custom `Codable` conformance that switches on the discriminator — and add an `.unknown(type:, raw:)` case. Unlike the generated SDKs, this port will lag behind API releases, so every closed union must degrade gracefully on an unrecognized `type` instead of failing to decode.
 4. Write a decode test using a literal JSON fixture (copy a real example response where possible) rather than round-tripping through your own encoder.
 
+## Keeping up with the reference SDKs
+
+[REFERENCE.md](REFERENCE.md) pins the exact Python/TypeScript commits this port has last been synced against, and has the commands to diff forward from that pin to find what's changed since. Check it periodically, port whatever's relevant, and update the pin.
+
 ## Scope
 
 See the maintainer's roadmap for the current phase and what's intentionally deferred. Bedrock/Vertex/Foundry platform clients are out of scope — this project targets the direct Anthropic API on Apple platforms only.

@@ -6,7 +6,7 @@ Ported by hand from the official [Python](https://github.com/anthropics/anthropi
 
 ## Status
 
-Feature-complete port of the GA API surface plus the full Beta/Managed Agents surface: Messages (including streaming and the tool runner), Models, Files, Batches, Completions, and the credential chain in `Anthropic`; Agents, Sessions (events, resources, threads, SSE streaming), Environments, Deployments, Vaults, Memory Stores, User Profiles, Webhooks, and Tunnels in `AnthropicBeta`. 473/473 tests passing. See `CONTRIBUTING.md` for the porting workflow and conventions.
+Feature-complete port of the GA API surface plus the full Beta/Managed Agents surface: Messages (including streaming and the tool runner), Models, Files, Batches, Completions, and the credential chain in `Anthropic`; Agents, Sessions (events, resources, threads, SSE streaming), Environments, Deployments, Vaults, Memory Stores, User Profiles, Webhooks, and Tunnels in `AnthropicBeta`. 524/524 tests passing. See `CONTRIBUTING.md` for the porting workflow and conventions, and `REFERENCE.md` for the exact reference-SDK commits this port is synced against.
 
 ## Installation
 
