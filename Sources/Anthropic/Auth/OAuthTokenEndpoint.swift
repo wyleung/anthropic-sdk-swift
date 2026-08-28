@@ -164,7 +164,8 @@ enum OAuthTokenEndpoint {
             type: redacted["error"]?.stringValue,
             message: message,
             body: .object(redacted),
-            retryAfter: nil
+            retryAfter: nil,
+            shouldRetryHeader: nil
         ))
     }
 }

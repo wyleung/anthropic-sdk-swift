@@ -8,6 +8,7 @@ public struct APIErrorDetail: Sendable {
     public let message: String
     public let body: JSONValue?
     public let retryAfter: TimeInterval?
+    public let shouldRetryHeader: Bool?
 }
 
 public enum AnthropicError: Error, Sendable {
@@ -50,8 +51,12 @@ public enum AnthropicError: Error, Sendable {
 
     public var statusCode: Int? { detail?.statusCode }
 
-    /// Mirrors the reference SDKs' retry policy: 408/409/429/5xx and connection-level failures.
+    /// Mirrors the reference SDKs' retry policy: an explicit `x-should-retry` header always wins;
+    /// otherwise 408/409/429/5xx and connection-level failures are retryable.
     public var isRetryable: Bool {
+        if let shouldRetryHeader = detail?.shouldRetryHeader {
+            return shouldRetryHeader
+        }
         switch self {
         case .connection, .timeout:
             return true
@@ -62,6 +67,8 @@ public enum AnthropicError: Error, Sendable {
     }
 
     package static func from(response: HTTPURLResponse, body: JSONValue?) -> AnthropicError {
+        let retryAfter = response.value(forHTTPHeaderField: "retry-after-ms").flatMap(parseRetryAfterMs)
+            ?? response.value(forHTTPHeaderField: "retry-after").flatMap(parseRetryAfter)
         let detail = APIErrorDetail(
             statusCode: response.statusCode,
             requestID: response.value(forHTTPHeaderField: "request-id"),
@@ -69,7 +76,8 @@ public enum AnthropicError: Error, Sendable {
             type: body?["error"]?["type"]?.stringValue,
             message: body?["error"]?["message"]?.stringValue ?? "HTTP \(response.statusCode)",
             body: body,
-            retryAfter: response.value(forHTTPHeaderField: "retry-after").flatMap(parseRetryAfter)
+            retryAfter: retryAfter,
+            shouldRetryHeader: response.value(forHTTPHeaderField: "x-should-retry").flatMap(parseShouldRetry)
         )
         switch response.statusCode {
         case 400: return .badRequest(detail)
@@ -98,6 +106,19 @@ public enum AnthropicError: Error, Sendable {
         formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
         guard let date = formatter.date(from: value) else { return nil }
         return max(0, date.timeIntervalSinceNow)
+    }
+
+    private static func parseRetryAfterMs(_ value: String) -> TimeInterval? {
+        guard let millis = Double(value) else { return nil }
+        return max(0, millis / 1000)
+    }
+
+    private static func parseShouldRetry(_ value: String) -> Bool? {
+        switch value.lowercased() {
+        case "true": return true
+        case "false": return false
+        default: return nil
+        }
     }
 }
 

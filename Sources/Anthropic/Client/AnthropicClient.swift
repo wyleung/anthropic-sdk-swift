@@ -144,7 +144,8 @@ private struct UnresolvedCredentialsProvider: CredentialProvider {
             message: "AnthropicClient needs an apiKey, an authProvider, an ANTHROPIC_API_KEY " +
                 "environment variable, or an ANTHROPIC_AUTH_TOKEN environment variable.",
             body: nil,
-            retryAfter: nil
+            retryAfter: nil,
+            shouldRetryHeader: nil
         ))
     }
 
