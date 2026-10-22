@@ -1,32 +1,31 @@
 import Anthropic
 import Foundation
 
-/// Every method sends the mandatory `"files-api-2025-04-14"` beta flag (see `betaRequestOptions`),
-/// matching `beta/files.py`. Unlike GA's `Files.list` (`ids`/`limit`/`page` + `PageCursor`), Beta's
-/// list is an id-cursor endpoint (`after_id`/`before_id`/`limit`/`scope_id` + `Page`) -- a genuine
-/// divergence from GA confirmed by reading the Python source, not an oversight.
+/// Sends `?beta=true` and, only when you pass `betas`, an `anthropic-beta` header -- matching
+/// `beta/files.py`, which dropped the mandatory dated `files-api-2025-04-14` pin. That header selects the
+/// *legacy* response shapes (an id-cursor list with `has_more`/`first_id`/`last_id`); without it the
+/// endpoints behave like GA's, so `list` now pages with `ids`/`page` and returns a `PageCursor`. A caller
+/// who still passes the legacy header gets the legacy shapes back, which won't decode as `PageCursor`.
 public struct BetaFiles: Sendable {
     unowned let client: AnthropicClient
 
+    /// `ids` is mutually exclusive with `page`/`limit`: when supplied, the response is always a single
+    /// page (`nextPage` is `nil`).
     public func list(
-        afterId: String? = nil,
-        beforeId: String? = nil,
+        ids: [String]? = nil,
         limit: Int? = nil,
+        page: String? = nil,
         scopeId: String? = nil,
         betas: [String] = [],
         options: RequestOptions = RequestOptions()
-    ) async throws -> Page<BetaFileMetadata> {
+    ) async throws -> PageCursor<BetaFileMetadata> {
         try await client.transport.get(
             path: "v1/files",
             query: betaQuery.merging(
-                [
-                    "after_id": afterId,
-                    "before_id": beforeId,
-                    "limit": limit.map(String.init),
-                    "scope_id": scopeId,
-                ]
+                ["limit": limit.map(String.init), "page": page, "scope_id": scopeId]
             ) { _, new in new },
-            options: betaRequestOptions(betas: betas, requiredBeta: "files-api-2025-04-14", base: options)
+            arrayQuery: ["ids": ids],
+            options: betaRequestOptions(betas: betas, base: options)
         )
     }
 
@@ -36,7 +35,7 @@ public struct BetaFiles: Sendable {
         try await client.transport.delete(
             path: "v1/files/\(fileId.asPathComponent)",
             query: betaQuery,
-            options: betaRequestOptions(betas: betas, requiredBeta: "files-api-2025-04-14", base: options)
+            options: betaRequestOptions(betas: betas, base: options)
         )
     }
 
@@ -49,7 +48,7 @@ public struct BetaFiles: Sendable {
             path: "v1/files/\(fileId.asPathComponent)/content",
             query: betaQuery,
             accept: "application/binary",
-            options: betaRequestOptions(betas: betas, requiredBeta: "files-api-2025-04-14", base: options)
+            options: betaRequestOptions(betas: betas, base: options)
         )
     }
 
@@ -59,7 +58,7 @@ public struct BetaFiles: Sendable {
         try await client.transport.get(
             path: "v1/files/\(fileId.asPathComponent)",
             query: betaQuery,
-            options: betaRequestOptions(betas: betas, requiredBeta: "files-api-2025-04-14", base: options)
+            options: betaRequestOptions(betas: betas, base: options)
         )
     }
 
@@ -67,23 +66,25 @@ public struct BetaFiles: Sendable {
     ///   - file: The raw bytes to upload.
     ///   - filename: Sent as the multipart part's `filename`.
     ///   - contentType: Sent as the multipart part's `Content-Type`.
-    ///
-    /// Unlike GA's `Files.upload`, Beta's upload has no `expiresInSeconds` param -- confirmed by
-    /// reading `beta/files.py`, whose `upload` only accepts `file`.
+    ///   - expiresInSeconds: How long until the file expires; sent as the `expires_in_seconds` form field.
     public func upload(
         file: Data,
         filename: String,
         contentType: String,
+        expiresInSeconds: Int? = nil,
         betas: [String] = [],
         options: RequestOptions = RequestOptions()
     ) async throws -> BetaFileMetadata {
         var multipart = MultipartFormData()
         multipart.addFile(name: "file", filename: filename, contentType: contentType, data: file)
+        if let expiresInSeconds {
+            multipart.addField(name: "expires_in_seconds", value: String(expiresInSeconds))
+        }
         return try await client.transport.postMultipart(
             path: "v1/files",
             query: betaQuery,
             multipart: multipart,
-            options: betaRequestOptions(betas: betas, requiredBeta: "files-api-2025-04-14", base: options)
+            options: betaRequestOptions(betas: betas, base: options)
         )
     }
 }

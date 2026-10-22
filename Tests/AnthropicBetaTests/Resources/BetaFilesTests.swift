@@ -17,6 +17,7 @@ final class BetaFilesTests: XCTestCase {
         "size_bytes": 1024,
         "type": "file",
         "downloadable": true,
+        "expires_at": "2026-02-15T00:00:00Z",
         "scope": {"id": "scope_01", "type": "workspace"}
     }
     """.data(using: .utf8)!
@@ -29,25 +30,30 @@ final class BetaFilesTests: XCTestCase {
         return (response, data)
     }
 
-    func testListSendsCursorAndScopeParams() async throws {
+    func testListSendsPageCursorIdsAndScopeParams() async throws {
         let fixture = """
-        {"data": [\(String(data: Self.fileFixture, encoding: .utf8)!)], "has_more": false, "first_id": "file_01ABC", "last_id": "file_01ABC"}
+        {"data": [\(String(data: Self.fileFixture, encoding: .utf8)!)], "next_page": "cursor-2"}
         """.data(using: .utf8)!
 
         MockURLProtocol.responder = { request in
             XCTAssertEqual(request.url?.path, "/v1/files")
             let query = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?.queryItems
-            XCTAssertEqual(query?.first { $0.name == "after_id" }?.value, "file_00")
+            XCTAssertEqual(query?.first { $0.name == "page" }?.value, "cursor-1")
             XCTAssertEqual(query?.first { $0.name == "scope_id" }?.value, "scope_01")
+            XCTAssertEqual(query?.filter { $0.name == "ids[]" }.compactMap(\.value), ["file_a", "file_b"])
+            XCTAssertNil(query?.first { $0.name == "after_id" }, "the legacy id-cursor params are gone")
+            XCTAssertNil(query?.first { $0.name == "before_id" })
             XCTAssertEqual(query?.first { $0.name == "limit" }?.value, "5")
             return self.jsonResponse(fixture)
         }
 
         let client = AnthropicClient(apiKey: "test-key", urlSession: MockURLProtocol.makeSession())
-        let page = try await client.beta.files.list(afterId: "file_00", limit: 5, scopeId: "scope_01")
+        let page = try await client.beta.files.list(ids: ["file_a", "file_b"], limit: 5, page: "cursor-1", scopeId: "scope_01")
 
         XCTAssertEqual(page.data.count, 1)
         XCTAssertEqual(page.data.first?.scope?.id, "scope_01")
+        XCTAssertEqual(page.nextPage, "cursor-2")
+        XCTAssertEqual(page.data.first?.expiresAt, "2026-02-15T00:00:00Z")
     }
 
     func testDeleteDecodesDeletedFile() async throws {
@@ -119,5 +125,42 @@ final class BetaFilesTests: XCTestCase {
         XCTAssertTrue(bodyString.contains("Content-Type: text/plain"))
         XCTAssertTrue(bodyString.contains("hello world"))
         XCTAssertTrue(bodyString.hasSuffix("--\(boundary)--\r\n"))
+    }
+
+    func testFilesRequestsNoLongerCarryTheLegacyFilesBetaHeader() async throws {
+        var headers: [String: String] = [:]
+        MockURLProtocol.responder = { request in
+            headers = request.allHTTPHeaderFields ?? [:]
+            return self.jsonResponse(Self.fileFixture)
+        }
+        let client = AnthropicClient(apiKey: "test-key", urlSession: MockURLProtocol.makeSession())
+        _ = try await client.beta.files.retrieveMetadata("file_01ABC")
+        XCTAssertNil(headers["anthropic-beta"], "files-api-2025-04-14 selects the legacy shapes; upstream dropped it")
+    }
+
+    func testUploadSendsExpiresInSecondsAsAFormField() async throws {
+        var body: String?
+        MockURLProtocol.responder = { request in
+            body = bodyData(from: request).flatMap { String(data: $0, encoding: .utf8) }
+            return self.jsonResponse(Self.fileFixture)
+        }
+        let client = AnthropicClient(apiKey: "test-key", urlSession: MockURLProtocol.makeSession())
+        _ = try await client.beta.files.upload(
+            file: Data("x".utf8), filename: "a.txt", contentType: "text/plain", expiresInSeconds: 3600
+        )
+        let sent = try XCTUnwrap(body)
+        XCTAssertTrue(sent.contains("name=\"expires_in_seconds\""))
+        XCTAssertTrue(sent.contains("3600"))
+    }
+
+    func testUploadOmitsExpiresInSecondsWhenNotGiven() async throws {
+        var body: String?
+        MockURLProtocol.responder = { request in
+            body = bodyData(from: request).flatMap { String(data: $0, encoding: .utf8) }
+            return self.jsonResponse(Self.fileFixture)
+        }
+        let client = AnthropicClient(apiKey: "test-key", urlSession: MockURLProtocol.makeSession())
+        _ = try await client.beta.files.upload(file: Data("x".utf8), filename: "a.txt", contentType: "text/plain")
+        XCTAssertFalse(try XCTUnwrap(body).contains("expires_in_seconds"))
     }
 }

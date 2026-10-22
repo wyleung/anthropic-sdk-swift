@@ -1,41 +1,45 @@
 import Anthropic
 import Foundation
 
-/// Every method sends the mandatory `"skills-2025-10-02"` beta flag (see `betaRequestOptions`),
-/// matching `beta/skills/skills.py`. Reuses GA's `SkillFileUpload` directly for `files` -- it's
-/// just filename/contentType/data, with no Beta-specific fields.
+/// Sends `?beta=true` and, only when you pass `betas`, an `anthropic-beta` header -- matching
+/// `beta/skills/skills.py`, which dropped the mandatory dated `skills-2025-10-02` pin. That header
+/// selects the *legacy* response shapes, so without it these methods return GA's (`Skill`,
+/// `SkillVersion`); a caller who still passes the header gets the legacy shapes back, which won't
+/// decode as `BetaSkill`. Reuses GA's `SkillFileUpload` directly for `files`.
+///
+/// `delete` removes a skill together with all of its versions (it used to refuse while any existed).
 public struct BetaSkills: Sendable {
     unowned let client: AnthropicClient
 
     /// All `files` must share the same top-level directory and include a `SKILL.md` at its root.
     public func create(
         files: [SkillFileUpload],
-        displayTitle: String? = nil,
+        displayName: String? = nil,
         betas: [String] = [],
         options: RequestOptions = RequestOptions()
-    ) async throws -> BetaSkillSummary {
+    ) async throws -> BetaSkill {
         var multipart = MultipartFormData()
         for file in files {
             multipart.addFile(name: "files", filename: file.filename, contentType: file.contentType, data: file.data)
         }
-        if let displayTitle {
-            multipart.addField(name: "display_title", value: displayTitle)
+        if let displayName {
+            multipart.addField(name: "display_name", value: displayName)
         }
         return try await client.transport.postMultipart(
             path: "v1/skills",
             query: betaQuery,
             multipart: multipart,
-            options: betaRequestOptions(betas: betas, requiredBeta: "skills-2025-10-02", base: options)
+            options: betaRequestOptions(betas: betas, base: options)
         )
     }
 
     public func retrieve(
         _ skillId: String, betas: [String] = [], options: RequestOptions = RequestOptions()
-    ) async throws -> BetaSkillSummary {
+    ) async throws -> BetaSkill {
         try await client.transport.get(
             path: "v1/skills/\(skillId.asPathComponent)",
             query: betaQuery,
-            options: betaRequestOptions(betas: betas, requiredBeta: "skills-2025-10-02", base: options)
+            options: betaRequestOptions(betas: betas, base: options)
         )
     }
 
@@ -45,13 +49,13 @@ public struct BetaSkills: Sendable {
         source: String? = nil,
         betas: [String] = [],
         options: RequestOptions = RequestOptions()
-    ) async throws -> PageCursor<BetaSkillSummary> {
+    ) async throws -> PageCursor<BetaSkill> {
         try await client.transport.get(
             path: "v1/skills",
             query: betaQuery.merging(
                 ["limit": limit.map(String.init), "page": page, "source": source]
             ) { _, new in new },
-            options: betaRequestOptions(betas: betas, requiredBeta: "skills-2025-10-02", base: options)
+            options: betaRequestOptions(betas: betas, base: options)
         )
     }
 
@@ -61,7 +65,7 @@ public struct BetaSkills: Sendable {
         try await client.transport.delete(
             path: "v1/skills/\(skillId.asPathComponent)",
             query: betaQuery,
-            options: betaRequestOptions(betas: betas, requiredBeta: "skills-2025-10-02", base: options)
+            options: betaRequestOptions(betas: betas, base: options)
         )
     }
 }
@@ -85,7 +89,7 @@ public struct BetaSkillVersions: Sendable {
             path: "v1/skills/\(skillId.asPathComponent)/versions",
             query: betaQuery,
             multipart: multipart,
-            options: betaRequestOptions(betas: betas, requiredBeta: "skills-2025-10-02", base: options)
+            options: betaRequestOptions(betas: betas, base: options)
         )
     }
 
@@ -99,7 +103,7 @@ public struct BetaSkillVersions: Sendable {
         try await client.transport.get(
             path: "v1/skills/\(skillId.asPathComponent)/versions/\(version.asPathComponent)",
             query: betaQuery,
-            options: betaRequestOptions(betas: betas, requiredBeta: "skills-2025-10-02", base: options)
+            options: betaRequestOptions(betas: betas, base: options)
         )
     }
 
@@ -113,7 +117,7 @@ public struct BetaSkillVersions: Sendable {
         try await client.transport.get(
             path: "v1/skills/\(skillId.asPathComponent)/versions",
             query: betaQuery.merging(["limit": limit.map(String.init), "page": page]) { _, new in new },
-            options: betaRequestOptions(betas: betas, requiredBeta: "skills-2025-10-02", base: options)
+            options: betaRequestOptions(betas: betas, base: options)
         )
     }
 
@@ -127,7 +131,7 @@ public struct BetaSkillVersions: Sendable {
         try await client.transport.delete(
             path: "v1/skills/\(skillId.asPathComponent)/versions/\(version.asPathComponent)",
             query: betaQuery,
-            options: betaRequestOptions(betas: betas, requiredBeta: "skills-2025-10-02", base: options)
+            options: betaRequestOptions(betas: betas, base: options)
         )
     }
 }

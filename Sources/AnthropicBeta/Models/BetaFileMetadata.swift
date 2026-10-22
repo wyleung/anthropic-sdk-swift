@@ -6,9 +6,9 @@ public struct BetaFileScope: Codable, Sendable, Equatable {
     public let type: String
 }
 
-/// Ported from `types/beta/beta_file_metadata.py`. Diverges from GA's `FileMetadata` in both
-/// directions -- it adds `scope` but drops `expiresAt` -- so this duplicates the type rather than
-/// reusing `FileMetadata`.
+/// Ported from `types/beta/beta_file_metadata.py`: GA's `FileMetadata` plus `scope`, so this duplicates
+/// the type rather than reusing it. (It used to also drop `expiresAt`; upstream added it here when the
+/// Beta Files namespace adopted the GA shapes.)
 public struct BetaFileMetadata: Codable, Sendable, Equatable {
     public let id: String
     public let createdAt: String
@@ -17,6 +17,8 @@ public struct BetaFileMetadata: Codable, Sendable, Equatable {
     public let sizeBytes: Int
     public let type: String
     public let downloadable: Bool?
+    /// When the file expires and is deleted; `nil` if it doesn't.
+    public let expiresAt: String?
     public let scope: BetaFileScope?
 }
 

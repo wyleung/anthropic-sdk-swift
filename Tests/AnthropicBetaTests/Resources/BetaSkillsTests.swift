@@ -12,9 +12,9 @@ final class BetaSkillsTests: XCTestCase {
     {
         "id": "skill_01ABC",
         "created_at": "2026-01-15T00:00:00Z",
-        "display_title": "PDF Summarizer",
-        "latest_version": "skillver_01ABC",
-        "source": "custom",
+        "display_name": "PDF Summarizer",
+        "latest_version_id": "skver_01ABC",
+        "source": {"type": "custom"},
         "type": "skill",
         "updated_at": "2026-01-15T00:00:00Z"
     }
@@ -22,14 +22,12 @@ final class BetaSkillsTests: XCTestCase {
 
     private static let skillVersionFixture = """
     {
-        "id": "skillver_01ABC",
+        "id": "skver_01ABC",
         "created_at": "2026-01-15T00:00:00Z",
         "description": "Summarizes PDFs",
-        "directory": "pdf-summarizer",
         "name": "pdf-summarizer",
         "skill_id": "skill_01ABC",
-        "type": "skill_version",
-        "version": "1"
+        "type": "skill_version"
     }
     """.data(using: .utf8)!
 
@@ -43,7 +41,7 @@ final class BetaSkillsTests: XCTestCase {
 
     // MARK: - BetaSkills
 
-    func testCreateSendsMultipartFilesAndDisplayTitle() async throws {
+    func testCreateSendsMultipartFilesAndDisplayName() async throws {
         var capturedRequest: URLRequest?
         MockURLProtocol.responder = { request in
             capturedRequest = request
@@ -62,10 +60,10 @@ final class BetaSkillsTests: XCTestCase {
                     filename: "helper.py", contentType: "text/x-python", data: Data("print(1)".utf8)
                 ),
             ],
-            displayTitle: "PDF Summarizer"
+            displayName: "PDF Summarizer"
         )
         XCTAssertEqual(skill.id, "skill_01ABC")
-        XCTAssertEqual(skill.source, "custom")
+        XCTAssertEqual(skill.source.type, .custom)
 
         let request = try XCTUnwrap(capturedRequest)
         let body = try XCTUnwrap(bodyData(from: request))
@@ -74,7 +72,7 @@ final class BetaSkillsTests: XCTestCase {
         XCTAssertEqual(bodyString.components(separatedBy: "name=\"files\"").count - 1, 2)
         XCTAssertTrue(bodyString.contains("filename=\"SKILL.md\""))
         XCTAssertTrue(bodyString.contains("filename=\"helper.py\""))
-        XCTAssertTrue(bodyString.contains("name=\"display_title\""))
+        XCTAssertTrue(bodyString.contains("name=\"display_name\""))
         XCTAssertTrue(bodyString.contains("PDF Summarizer"))
     }
 
@@ -85,8 +83,8 @@ final class BetaSkillsTests: XCTestCase {
         }
         let client = AnthropicClient(apiKey: "test-key", urlSession: MockURLProtocol.makeSession())
         let skill = try await client.beta.skills.retrieve("skill_01ABC")
-        XCTAssertEqual(skill.displayTitle, "PDF Summarizer")
-        XCTAssertEqual(skill.latestVersion, "skillver_01ABC")
+        XCTAssertEqual(skill.displayName, "PDF Summarizer")
+        XCTAssertEqual(skill.latestVersionId, "skver_01ABC")
     }
 
     func testListSendsQueryParams() async throws {
@@ -133,7 +131,7 @@ final class BetaSkillsTests: XCTestCase {
             skillId: "skill_01ABC",
             files: [SkillFileUpload(filename: "SKILL.md", contentType: "text/markdown", data: Data("# v2".utf8))]
         )
-        XCTAssertEqual(version.id, "skillver_01ABC")
+        XCTAssertEqual(version.id, "skver_01ABC")
         XCTAssertEqual(version.skillId, "skill_01ABC")
 
         let request = try XCTUnwrap(capturedRequest)
@@ -168,14 +166,46 @@ final class BetaSkillsTests: XCTestCase {
     }
 
     func testVersionsDeleteDecodesDeletedSkillVersion() async throws {
-        let fixture = #"{"id": "skillver_01ABC", "type": "skill_version_deleted"}"#.data(using: .utf8)!
+        let fixture = #"{"id": "skver_01ABC", "type": "skill_version_deleted"}"#.data(using: .utf8)!
         MockURLProtocol.responder = { request in
             XCTAssertEqual(request.httpMethod, "DELETE")
-            XCTAssertEqual(request.url?.path, "/v1/skills/skill_01ABC/versions/skillver_01ABC")
+            XCTAssertEqual(request.url?.path, "/v1/skills/skill_01ABC/versions/skver_01ABC")
             return self.jsonResponse(fixture)
         }
         let client = AnthropicClient(apiKey: "test-key", urlSession: MockURLProtocol.makeSession())
-        let deleted = try await client.beta.skills.versions.delete("skillver_01ABC", skillId: "skill_01ABC")
+        let deleted = try await client.beta.skills.versions.delete("skver_01ABC", skillId: "skill_01ABC")
         XCTAssertEqual(deleted.type, "skill_version_deleted")
+    }
+
+    // MARK: - GA shapes, no mandatory legacy beta header
+
+    func testSkillsRequestsNoLongerCarryTheLegacySkillsBetaHeader() async throws {
+        // `skills-2025-10-02` selects the legacy response shapes; upstream stopped sending it.
+        var headers: [String: String] = [:]
+        MockURLProtocol.responder = { request in
+            headers = request.allHTTPHeaderFields ?? [:]
+            return self.jsonResponse(Self.skillFixture)
+        }
+        let client = AnthropicClient(apiKey: "test-key", urlSession: MockURLProtocol.makeSession())
+        _ = try await client.beta.skills.retrieve("skill_01ABC")
+        XCTAssertNil(headers["anthropic-beta"])
+    }
+
+    func testCallerSuppliedBetasAreStillSentOnSkills() async throws {
+        var header: String?
+        MockURLProtocol.responder = { request in
+            header = request.value(forHTTPHeaderField: "anthropic-beta")
+            return self.jsonResponse(Self.skillFixture)
+        }
+        let client = AnthropicClient(apiKey: "test-key", urlSession: MockURLProtocol.makeSession())
+        _ = try await client.beta.skills.retrieve("skill_01ABC", betas: ["some-future-beta"])
+        XCTAssertEqual(header, "some-future-beta")
+    }
+
+    func testBetaSkillIsTheSameShapeAsGAsSkill() throws {
+        let beta = try HTTPTransport.decoder.decode(BetaSkill.self, from: Self.skillFixture)
+        let ga = try HTTPTransport.decoder.decode(Skill.self, from: Self.skillFixture)
+        XCTAssertEqual(beta, ga)
+        XCTAssertEqual(beta.source.type, .custom)
     }
 }
