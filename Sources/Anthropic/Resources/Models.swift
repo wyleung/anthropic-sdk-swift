@@ -12,9 +12,14 @@ public struct Models: Sendable {
     }
 
     /// List available models, most recently released first.
+    ///
+    /// - Parameter lifecycle: Restricts the list to models in any of these stages -- `"active"`,
+    ///   `"deprecated"` or `"retired"`, up to 3. When omitted the list holds the `active` and
+    ///   `deprecated` models; `retired` ones appear only when requested explicitly.
     public func list(
         afterId: String? = nil,
         beforeId: String? = nil,
+        lifecycle: [String]? = nil,
         limit: Int? = nil,
         options: RequestOptions = RequestOptions()
     ) async throws -> Page<ModelInfo> {
@@ -25,6 +30,7 @@ public struct Models: Sendable {
                 "before_id": beforeId,
                 "limit": limit.map(String.init),
             ],
+            arrayQuery: ["lifecycle": lifecycle],
             options: options
         )
     }

@@ -4,8 +4,13 @@ public struct CapabilitySupport: Codable, Sendable, Equatable {
 }
 
 /// Ported from `types/thinking_types.py`.
+///
+/// `betweenTools` and `disabled` were added after this port; optional so a payload without them
+/// still decodes.
 public struct ThinkingTypes: Codable, Sendable, Equatable {
     public let adaptive: CapabilitySupport
+    public let betweenTools: CapabilitySupport?
+    public let disabled: CapabilitySupport?
     public let enabled: CapabilitySupport
 }
 
@@ -33,6 +38,14 @@ public struct ContextManagementCapability: Codable, Sendable, Equatable {
     public let supported: Bool
 }
 
+/// Web search and code execution tool support, with one entry per tool. Ported from
+/// `types/server_tools_capability.py`.
+public struct ServerToolsCapability: Codable, Sendable, Equatable {
+    public let codeExecution: CapabilitySupport
+    public let supported: Bool
+    public let webSearch: CapabilitySupport
+}
+
 /// Ported from `types/model_capabilities.py`.
 public struct ModelCapabilities: Codable, Sendable, Equatable {
     public let batch: CapabilitySupport
@@ -42,6 +55,8 @@ public struct ModelCapabilities: Codable, Sendable, Equatable {
     public let effort: EffortCapability
     public let imageInput: CapabilitySupport
     public let pdfInput: CapabilitySupport
+    /// Optional because it postdates this port; see `ThinkingTypes`.
+    public let serverTools: ServerToolsCapability?
     public let structuredOutputs: CapabilitySupport
     public let thinking: ThinkingCapability
 }
