@@ -80,14 +80,16 @@ extension BetaManagedAgentsCheckoutParam: Encodable {
 /// Mount a GitHub repository into the session's container. Ported from
 /// `beta_managed_agents_github_repository_resource_params.py`.
 public struct BetaManagedAgentsGitHubRepositoryResourceParams: Encodable, Sendable, Equatable {
-    public var authorizationToken: String
+    /// Used to clone the repository: required for a private one, optional for a public one (public
+    /// repositories can be mounted without any token).
+    public var authorizationToken: String?
     public var type = "github_repository"
     public var url: String
     public var checkout: BetaManagedAgentsCheckoutParam?
     public var mountPath: String?
 
     public init(
-        authorizationToken: String,
+        authorizationToken: String? = nil,
         url: String,
         checkout: BetaManagedAgentsCheckoutParam? = nil,
         mountPath: String? = nil

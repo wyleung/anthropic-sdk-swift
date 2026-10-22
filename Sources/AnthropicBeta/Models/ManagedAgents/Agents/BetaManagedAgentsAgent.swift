@@ -8,6 +8,9 @@ public struct BetaManagedAgentsAgent: Codable, Sendable, Equatable {
     public let archivedAt: String?
     public let createdAt: String
     public let description: String?
+    /// The principal runs carry; `{"type": "service_account"}` when none is named. Optional only because it
+    /// postdates this port, so a response without it must still decode.
+    public let executionIdentity: BetaManagedAgentsExecutionIdentity?
     public let mcpServers: [BetaManagedAgentsMCPServerURLDefinition]
     public let metadata: [String: String]
     public let model: BetaManagedAgentsModelConfig
@@ -25,6 +28,7 @@ public struct BetaManagedAgentsAgent: Codable, Sendable, Equatable {
         archivedAt: String? = nil,
         createdAt: String,
         description: String? = nil,
+        executionIdentity: BetaManagedAgentsExecutionIdentity? = nil,
         mcpServers: [BetaManagedAgentsMCPServerURLDefinition],
         metadata: [String: String],
         model: BetaManagedAgentsModelConfig,
@@ -41,6 +45,7 @@ public struct BetaManagedAgentsAgent: Codable, Sendable, Equatable {
         self.archivedAt = archivedAt
         self.createdAt = createdAt
         self.description = description
+        self.executionIdentity = executionIdentity
         self.mcpServers = mcpServers
         self.metadata = metadata
         self.model = model

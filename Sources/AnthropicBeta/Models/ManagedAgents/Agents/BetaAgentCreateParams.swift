@@ -7,6 +7,8 @@ public struct BetaAgentCreateParams: Encodable, Sendable, Equatable {
     public let model: BetaAgentModelParam
     public let name: String
     public let description: String?
+    /// Execution principal for runs of this agent. Omit to take the default; `.serviceAccount` is the default.
+    public let executionIdentity: BetaManagedAgentsExecutionIdentityParams?
     public let mcpServers: [BetaManagedAgentsURLMCPServerParams]?
     public let metadata: [String: String]?
     public let multiagent: BetaManagedAgentsMultiagentParams?
@@ -18,6 +20,7 @@ public struct BetaAgentCreateParams: Encodable, Sendable, Equatable {
         model: BetaAgentModelParam,
         name: String,
         description: String? = nil,
+        executionIdentity: BetaManagedAgentsExecutionIdentityParams? = nil,
         mcpServers: [BetaManagedAgentsURLMCPServerParams]? = nil,
         metadata: [String: String]? = nil,
         multiagent: BetaManagedAgentsMultiagentParams? = nil,
@@ -28,6 +31,7 @@ public struct BetaAgentCreateParams: Encodable, Sendable, Equatable {
         self.model = model
         self.name = name
         self.description = description
+        self.executionIdentity = executionIdentity
         self.mcpServers = mcpServers
         self.metadata = metadata
         self.multiagent = multiagent

@@ -45,12 +45,16 @@ public struct BetaManagedAgentsAgentToolUseEvent: Codable, Sendable, Equatable {
     public let processedAt: String
     public let type: String
     public let evaluatedPermission: BetaManagedAgentsAgentEvaluatedPermission?
+    /// Which policy produced `evaluatedPermission` and, for `auto`, the server's reasoning. Absent on
+    /// events from before the field existed.
+    public let evaluation: BetaManagedAgentsAgentToolEvaluation?
     public let sessionThreadId: String?
 
     public init(
         id: String, input: [String: JSONValue], name: String, processedAt: String,
         type: String = "agent.tool_use",
         evaluatedPermission: BetaManagedAgentsAgentEvaluatedPermission? = nil,
+        evaluation: BetaManagedAgentsAgentToolEvaluation? = nil,
         sessionThreadId: String? = nil
     ) {
         self.id = id
@@ -59,6 +63,7 @@ public struct BetaManagedAgentsAgentToolUseEvent: Codable, Sendable, Equatable {
         self.processedAt = processedAt
         self.type = type
         self.evaluatedPermission = evaluatedPermission
+        self.evaluation = evaluation
         self.sessionThreadId = sessionThreadId
     }
 }
@@ -96,12 +101,16 @@ public struct BetaManagedAgentsAgentMCPToolUseEvent: Codable, Sendable, Equatabl
     public let processedAt: String
     public let type: String
     public let evaluatedPermission: BetaManagedAgentsAgentEvaluatedPermission?
+    /// Which policy produced `evaluatedPermission` and, for `auto`, the server's reasoning. Absent on
+    /// events from before the field existed.
+    public let evaluation: BetaManagedAgentsAgentToolEvaluation?
     public let sessionThreadId: String?
 
     public init(
         id: String, input: [String: JSONValue], mcpServerName: String, name: String, processedAt: String,
         type: String = "agent.mcp_tool_use",
         evaluatedPermission: BetaManagedAgentsAgentEvaluatedPermission? = nil,
+        evaluation: BetaManagedAgentsAgentToolEvaluation? = nil,
         sessionThreadId: String? = nil
     ) {
         self.id = id
@@ -111,6 +120,7 @@ public struct BetaManagedAgentsAgentMCPToolUseEvent: Codable, Sendable, Equatabl
         self.processedAt = processedAt
         self.type = type
         self.evaluatedPermission = evaluatedPermission
+        self.evaluation = evaluation
         self.sessionThreadId = sessionThreadId
     }
 }

@@ -24,6 +24,9 @@ import Anthropic
 ///   turns out to matter in practice.
 public struct BetaAgentUpdateParams: Encodable, Sendable, Equatable {
     public let description: String?
+    /// Execution principal for runs of this agent -- a full replacement. Omit to preserve the current one;
+    /// `.serviceAccount` (upstream treats it as equivalent to `null`) restores the default.
+    public let executionIdentity: BetaManagedAgentsExecutionIdentityParams?
     public let system: String?
     public let mcpServers: [BetaManagedAgentsURLMCPServerParams]?
     public let skills: [BetaManagedAgentsSkillParams]?
@@ -36,6 +39,7 @@ public struct BetaAgentUpdateParams: Encodable, Sendable, Equatable {
 
     public init(
         description: String? = nil,
+        executionIdentity: BetaManagedAgentsExecutionIdentityParams? = nil,
         system: String? = nil,
         mcpServers: [BetaManagedAgentsURLMCPServerParams]? = nil,
         skills: [BetaManagedAgentsSkillParams]? = nil,
@@ -47,6 +51,7 @@ public struct BetaAgentUpdateParams: Encodable, Sendable, Equatable {
         version: Int? = nil
     ) {
         self.description = description
+        self.executionIdentity = executionIdentity
         self.system = system
         self.mcpServers = mcpServers
         self.skills = skills

@@ -8,6 +8,9 @@ import Anthropic
 public struct BetaManagedAgentsSessionThreadAgent: Codable, Sendable, Equatable {
     public let id: String
     public let description: String?
+    /// The principal runs carry; `{"type": "service_account"}` when none is named. Optional only because it
+    /// postdates this port, so a response without it must still decode.
+    public let executionIdentity: BetaManagedAgentsExecutionIdentity?
     public let mcpServers: [BetaManagedAgentsMCPServerURLDefinition]
     public let model: BetaManagedAgentsModelConfig
     public let name: String
@@ -20,6 +23,7 @@ public struct BetaManagedAgentsSessionThreadAgent: Codable, Sendable, Equatable 
     public init(
         id: String,
         description: String? = nil,
+        executionIdentity: BetaManagedAgentsExecutionIdentity? = nil,
         mcpServers: [BetaManagedAgentsMCPServerURLDefinition],
         model: BetaManagedAgentsModelConfig,
         name: String,
@@ -31,6 +35,7 @@ public struct BetaManagedAgentsSessionThreadAgent: Codable, Sendable, Equatable 
     ) {
         self.id = id
         self.description = description
+        self.executionIdentity = executionIdentity
         self.mcpServers = mcpServers
         self.model = model
         self.name = name

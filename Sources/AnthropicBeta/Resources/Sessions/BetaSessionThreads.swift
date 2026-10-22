@@ -25,10 +25,13 @@ public struct BetaSessionThreads: Sendable {
     }
 
     /// List threads within a session. Forward-only pagination -- defaults to 1000 results per page.
+    /// - Parameter statuses: Return only threads with one of these statuses (`"running"`, `"idle"`,
+    ///   `"rescheduling"` or `"terminated"`); omit for threads of every status.
     public func list(
         sessionId: String,
         limit: Int? = nil,
         page: String? = nil,
+        statuses: [String]? = nil,
         betas: [String] = [],
         options: RequestOptions = RequestOptions()
     ) async throws -> PageCursor<BetaManagedAgentsSessionThread> {
@@ -40,6 +43,7 @@ public struct BetaSessionThreads: Sendable {
                     "page": page,
                 ]
             ) { _, new in new },
+            arrayQuery: ["statuses": statuses],
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
         )
     }
