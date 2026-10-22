@@ -17,9 +17,14 @@ public struct BetaModels: Sendable {
     }
 
     /// List available models, most recently released first.
+    ///
+    /// - Parameter lifecycle: Restricts the list to models in any of these stages -- `"active"`,
+    ///   `"deprecated"` or `"retired"`, up to 3. When omitted the list holds the `active` and
+    ///   `deprecated` models; `retired` ones appear only when requested explicitly.
     public func list(
         afterId: String? = nil,
         beforeId: String? = nil,
+        lifecycle: [String]? = nil,
         limit: Int? = nil,
         betas: [String] = [],
         options: RequestOptions = RequestOptions()
@@ -29,6 +34,7 @@ public struct BetaModels: Sendable {
             query: betaQuery.merging(
                 ["after_id": afterId, "before_id": beforeId, "limit": limit.map(String.init)]
             ) { _, new in new },
+            arrayQuery: ["lifecycle": lifecycle],
             options: betaRequestOptions(betas: betas, base: options)
         )
     }
