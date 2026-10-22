@@ -14,4 +14,5 @@ public struct Usage: Codable, Sendable, Equatable {
     public let outputTokensDetails: OutputTokensDetails?
     public let serverToolUse: ServerToolUsage?
     public let serviceTier: ServiceTier?
+    public let speed: Speed?
 }

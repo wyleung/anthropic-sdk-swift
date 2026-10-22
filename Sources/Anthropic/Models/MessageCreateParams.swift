@@ -9,10 +9,12 @@ public struct MessageCreateParams: Encodable, Sendable, Equatable {
     public let messages: [MessageParam]
     public let cacheControl: CacheControlEphemeral?
     public let container: MessageCreateParamsContainerParam?
+    public let diagnostics: DiagnosticsParam?
     public let inferenceGeo: String?
     public let metadata: MetadataParam?
     public let outputConfig: OutputConfigParam?
     public let serviceTier: ServiceTier?
+    public let speed: Speed?
     public let stopSequences: [String]?
     public let system: SystemPromptParam?
     public let thinking: ThinkingConfigParam?
@@ -25,10 +27,12 @@ public struct MessageCreateParams: Encodable, Sendable, Equatable {
         messages: [MessageParam],
         cacheControl: CacheControlEphemeral? = nil,
         container: MessageCreateParamsContainerParam? = nil,
+        diagnostics: DiagnosticsParam? = nil,
         inferenceGeo: String? = nil,
         metadata: MetadataParam? = nil,
         outputConfig: OutputConfigParam? = nil,
         serviceTier: ServiceTier? = nil,
+        speed: Speed? = nil,
         stopSequences: [String]? = nil,
         system: SystemPromptParam? = nil,
         thinking: ThinkingConfigParam? = nil,
@@ -40,10 +44,12 @@ public struct MessageCreateParams: Encodable, Sendable, Equatable {
         self.messages = messages
         self.cacheControl = cacheControl
         self.container = container
+        self.diagnostics = diagnostics
         self.inferenceGeo = inferenceGeo
         self.metadata = metadata
         self.outputConfig = outputConfig
         self.serviceTier = serviceTier
+        self.speed = speed
         self.stopSequences = stopSequences
         self.system = system
         self.thinking = thinking

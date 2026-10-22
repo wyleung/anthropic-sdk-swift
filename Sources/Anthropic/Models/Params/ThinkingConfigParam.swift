@@ -29,9 +29,17 @@ public struct ThinkingConfigAdaptiveParam: Encodable, Sendable, Equatable {
     }
 }
 
+/// Thinking between tool calls. Ported from `types/thinking_config_between_tools_param.py`.
+public struct ThinkingConfigBetweenToolsParam: Encodable, Sendable, Equatable {
+    public let type = "between_tools"
+
+    public init() {}
+}
+
 public enum ThinkingConfigParam: Sendable, Equatable {
     case enabled(ThinkingConfigEnabledParam)
     case disabled(ThinkingConfigDisabledParam)
+    case betweenTools(ThinkingConfigBetweenToolsParam)
     case adaptive(ThinkingConfigAdaptiveParam)
 }
 
@@ -40,6 +48,7 @@ extension ThinkingConfigParam: Encodable {
         switch self {
         case .enabled(let value): try value.encode(to: encoder)
         case .disabled(let value): try value.encode(to: encoder)
+        case .betweenTools(let value): try value.encode(to: encoder)
         case .adaptive(let value): try value.encode(to: encoder)
         }
     }

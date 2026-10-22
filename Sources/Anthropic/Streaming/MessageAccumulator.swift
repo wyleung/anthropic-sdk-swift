@@ -84,7 +84,7 @@ struct MessageAccumulator {
         case .contentBlockStart(let start):
             current = Message(
                 id: current.id, type: current.type, role: current.role,
-                content: current.content + [start.contentBlock],
+                content: current.content + [start.contentBlock], diagnostics: current.diagnostics,
                 model: current.model, container: current.container,
                 stopReason: current.stopReason, stopSequence: current.stopSequence,
                 stopDetails: current.stopDetails, usage: current.usage
@@ -112,11 +112,12 @@ struct MessageAccumulator {
             inferenceGeo: usage.inferenceGeo,
             outputTokensDetails: delta.usage.outputTokensDetails ?? usage.outputTokensDetails,
             serverToolUse: delta.usage.serverToolUse ?? usage.serverToolUse,
-            serviceTier: usage.serviceTier
+            serviceTier: usage.serviceTier,
+            speed: usage.speed
         )
         return Message(
             id: message.id, type: message.type, role: message.role, content: message.content,
-            model: message.model,
+            diagnostics: message.diagnostics, model: message.model,
             container: delta.delta.container ?? message.container,
             stopReason: delta.delta.stopReason,
             stopSequence: delta.delta.stopSequence,
@@ -182,7 +183,7 @@ struct MessageAccumulator {
 
         return Message(
             id: message.id, type: message.type, role: message.role, content: content,
-            model: message.model, container: message.container,
+            diagnostics: message.diagnostics, model: message.model, container: message.container,
             stopReason: message.stopReason, stopSequence: message.stopSequence,
             stopDetails: message.stopDetails, usage: message.usage
         )
