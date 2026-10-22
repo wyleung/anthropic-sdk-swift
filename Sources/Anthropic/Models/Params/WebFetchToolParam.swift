@@ -10,6 +10,7 @@ public struct WebFetchTool20250910Param: Encodable, Sendable, Equatable {
     public let maxContentTokens: Int?
     public let maxUses: Int?
     public let strict: Bool?
+    public let urlSources: WebFetchURLSourcesParam?
 
     public init(
         allowedCallers: [AllowedCaller]? = nil,
@@ -20,7 +21,8 @@ public struct WebFetchTool20250910Param: Encodable, Sendable, Equatable {
         deferLoading: Bool? = nil,
         maxContentTokens: Int? = nil,
         maxUses: Int? = nil,
-        strict: Bool? = nil
+        strict: Bool? = nil,
+        urlSources: WebFetchURLSourcesParam? = nil
     ) {
         self.allowedCallers = allowedCallers
         self.allowedDomains = allowedDomains
@@ -31,6 +33,7 @@ public struct WebFetchTool20250910Param: Encodable, Sendable, Equatable {
         self.maxContentTokens = maxContentTokens
         self.maxUses = maxUses
         self.strict = strict
+        self.urlSources = urlSources
     }
 }
 
@@ -46,6 +49,7 @@ public struct WebFetchTool20260209Param: Encodable, Sendable, Equatable {
     public let maxContentTokens: Int?
     public let maxUses: Int?
     public let strict: Bool?
+    public let urlSources: WebFetchURLSourcesParam?
 
     public init(
         allowedCallers: [AllowedCaller]? = nil,
@@ -56,7 +60,8 @@ public struct WebFetchTool20260209Param: Encodable, Sendable, Equatable {
         deferLoading: Bool? = nil,
         maxContentTokens: Int? = nil,
         maxUses: Int? = nil,
-        strict: Bool? = nil
+        strict: Bool? = nil,
+        urlSources: WebFetchURLSourcesParam? = nil
     ) {
         self.allowedCallers = allowedCallers
         self.allowedDomains = allowedDomains
@@ -67,6 +72,7 @@ public struct WebFetchTool20260209Param: Encodable, Sendable, Equatable {
         self.maxContentTokens = maxContentTokens
         self.maxUses = maxUses
         self.strict = strict
+        self.urlSources = urlSources
     }
 }
 
@@ -82,6 +88,7 @@ public struct WebFetchTool20260309Param: Encodable, Sendable, Equatable {
     public let maxContentTokens: Int?
     public let maxUses: Int?
     public let strict: Bool?
+    public let urlSources: WebFetchURLSourcesParam?
     public let useCache: Bool?
 
     public init(
@@ -94,6 +101,7 @@ public struct WebFetchTool20260309Param: Encodable, Sendable, Equatable {
         maxContentTokens: Int? = nil,
         maxUses: Int? = nil,
         strict: Bool? = nil,
+        urlSources: WebFetchURLSourcesParam? = nil,
         useCache: Bool? = nil
     ) {
         self.allowedCallers = allowedCallers
@@ -105,6 +113,7 @@ public struct WebFetchTool20260309Param: Encodable, Sendable, Equatable {
         self.maxContentTokens = maxContentTokens
         self.maxUses = maxUses
         self.strict = strict
+        self.urlSources = urlSources
         self.useCache = useCache
     }
 }
@@ -122,6 +131,7 @@ public struct WebFetchTool20260318Param: Encodable, Sendable, Equatable {
     public let maxUses: Int?
     public let responseInclusion: ToolResponseInclusion?
     public let strict: Bool?
+    public let urlSources: WebFetchURLSourcesParam?
     public let useCache: Bool?
 
     public init(
@@ -135,6 +145,7 @@ public struct WebFetchTool20260318Param: Encodable, Sendable, Equatable {
         maxUses: Int? = nil,
         responseInclusion: ToolResponseInclusion? = nil,
         strict: Bool? = nil,
+        urlSources: WebFetchURLSourcesParam? = nil,
         useCache: Bool? = nil
     ) {
         self.allowedCallers = allowedCallers
@@ -147,6 +158,7 @@ public struct WebFetchTool20260318Param: Encodable, Sendable, Equatable {
         self.maxUses = maxUses
         self.responseInclusion = responseInclusion
         self.strict = strict
+        self.urlSources = urlSources
         self.useCache = useCache
     }
 }

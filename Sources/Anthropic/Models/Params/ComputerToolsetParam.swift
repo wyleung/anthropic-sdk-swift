@@ -228,16 +228,13 @@ public struct ComputerToolsetConfigsParam: Encodable, Sendable, Equatable {
 
 public struct ComputerToolset20260801Param: Encodable, Sendable, Equatable {
     public let type = "computer_toolset_20260801"
-    public let allowedCallers: [AllowedCaller]?
     public let cacheControl: CacheControlEphemeral?
     public let configs: ComputerToolsetConfigsParam?
 
     public init(
-        allowedCallers: [AllowedCaller]? = nil,
         cacheControl: CacheControlEphemeral? = nil,
         configs: ComputerToolsetConfigsParam? = nil
     ) {
-        self.allowedCallers = allowedCallers
         self.cacheControl = cacheControl
         self.configs = configs
     }

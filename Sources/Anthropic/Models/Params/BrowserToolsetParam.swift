@@ -410,16 +410,13 @@ public struct BrowserToolsetConfigsParam: Encodable, Sendable, Equatable {
 
 public struct BrowserToolset20260801Param: Encodable, Sendable, Equatable {
     public let type = "browser_toolset_20260801"
-    public let allowedCallers: [AllowedCaller]?
     public let cacheControl: CacheControlEphemeral?
     public let configs: BrowserToolsetConfigsParam?
 
     public init(
-        allowedCallers: [AllowedCaller]? = nil,
         cacheControl: CacheControlEphemeral? = nil,
         configs: BrowserToolsetConfigsParam? = nil
     ) {
-        self.allowedCallers = allowedCallers
         self.cacheControl = cacheControl
         self.configs = configs
     }
