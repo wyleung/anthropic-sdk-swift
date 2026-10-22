@@ -168,7 +168,10 @@ final class BetaAgentsTests: XCTestCase {
         XCTAssertEqual(agent.model.effort, .high)
         XCTAssertEqual(agent.model.speed, .fast)
 
-        let multiagent = try XCTUnwrap(agent.multiagent)
+        // `multiagent` is now a union (coordinator | multiagent_20261001); this agent still has the original shape.
+        guard case .coordinator(let multiagent) = try XCTUnwrap(agent.multiagent) else {
+            return XCTFail("Expected a coordinator multiagent")
+        }
         XCTAssertEqual(multiagent.agents.count, 2)
         guard case .agent(let reference) = multiagent.agents[0] else {
             return XCTFail("Expected an agent reference")

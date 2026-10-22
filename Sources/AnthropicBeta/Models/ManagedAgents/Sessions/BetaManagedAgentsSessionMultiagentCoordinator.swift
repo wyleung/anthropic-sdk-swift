@@ -55,6 +55,7 @@ public struct BetaManagedAgentsSessionThreadAgent: Codable, Sendable, Equatable 
 public enum BetaManagedAgentsCoordinatorAgent: Sendable, Equatable {
     case agent(BetaManagedAgentsSessionThreadAgent)
     case advisor(BetaManagedAgentsAdvisor)
+    case inline(BetaManagedAgentsInlineAgent)
     case unknown(type: String, raw: JSONValue)
 }
 
@@ -69,6 +70,7 @@ extension BetaManagedAgentsCoordinatorAgent: Codable {
         switch type {
         case "agent": self = .agent(try BetaManagedAgentsSessionThreadAgent(from: decoder))
         case "advisor": self = .advisor(try BetaManagedAgentsAdvisor(from: decoder))
+        case "inline": self = .inline(try BetaManagedAgentsInlineAgent(from: decoder))
         default: self = .unknown(type: type, raw: try JSONValue(from: decoder))
         }
     }
@@ -77,6 +79,7 @@ extension BetaManagedAgentsCoordinatorAgent: Codable {
         switch self {
         case .agent(let value): try value.encode(to: encoder)
         case .advisor(let value): try value.encode(to: encoder)
+        case .inline(let value): try value.encode(to: encoder)
         case .unknown(_, let raw): try raw.encode(to: encoder)
         }
     }

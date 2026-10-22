@@ -62,9 +62,10 @@ extension BetaManagedAgentsMultiagentAgent: Codable {
     }
 }
 
-/// Ported from `beta_managed_agents_multiagent.py`. The `type` field is always the literal
-/// `"coordinator"`.
-public struct BetaManagedAgentsMultiagent: Codable, Sendable, Equatable {
+/// A coordinator topology: the primary thread orchestrates work by spawning session threads, each running
+/// an agent from this roster. Ported from `beta_managed_agents_multiagent_coordinator.py` -- the original,
+/// pre-`multiagent_20261001` shape of `multiagent`, which is now one case of `BetaManagedAgentsMultiagent`.
+public struct BetaManagedAgentsMultiagentCoordinator: Codable, Sendable, Equatable {
     public let agents: [BetaManagedAgentsMultiagentAgent]
     public let type: String
 
@@ -74,8 +75,38 @@ public struct BetaManagedAgentsMultiagent: Codable, Sendable, Equatable {
     }
 }
 
-/// Ported from `beta_managed_agents_agent_params.py`. `version` is optional -- "omit to reference
-/// the latest version of the agent".
+/// An agent's multiagent configuration. Ported from `beta_managed_agents_multiagent.py`, which became a
+/// two-way union: the original `coordinator` roster, or `multiagent_20261001`, whose three members
+/// (advisor, subagents, workflows) are each enabled or disabled on their own.
+public enum BetaManagedAgentsMultiagent: Sendable, Equatable {
+    case coordinator(BetaManagedAgentsMultiagentCoordinator)
+    case multiagent20261001(BetaManagedAgentsMultiagent20261001)
+    case unknown(type: String, raw: JSONValue)
+}
+
+extension BetaManagedAgentsMultiagent: Codable {
+    private enum DiscriminatorKeys: String, CodingKey {
+        case type
+    }
+
+    public init(from decoder: Decoder) throws {
+        let type = try decoder.container(keyedBy: DiscriminatorKeys.self).decode(String.self, forKey: .type)
+        switch type {
+        case "coordinator": self = .coordinator(try BetaManagedAgentsMultiagentCoordinator(from: decoder))
+        case "multiagent_20261001": self = .multiagent20261001(try BetaManagedAgentsMultiagent20261001(from: decoder))
+        default: self = .unknown(type: type, raw: try JSONValue(from: decoder))
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        switch self {
+        case .coordinator(let value): try value.encode(to: encoder)
+        case .multiagent20261001(let value): try value.encode(to: encoder)
+        case .unknown(_, let raw): try raw.encode(to: encoder)
+        }
+    }
+}
+
 public struct BetaManagedAgentsAgentParams: Encodable, Sendable, Equatable {
     public let id: String
     public let type = "agent"
@@ -133,16 +164,5 @@ extension BetaManagedAgentsMultiagentRosterEntryParams: Encodable {
 extension BetaManagedAgentsMultiagentRosterEntryParams: ExpressibleByStringLiteral {
     public init(stringLiteral value: String) {
         self = .id(value)
-    }
-}
-
-/// Ported from `beta_managed_agents_multiagent_params.py`. The `type` field is always the literal
-/// `"coordinator"`.
-public struct BetaManagedAgentsMultiagentParams: Encodable, Sendable, Equatable {
-    public let agents: [BetaManagedAgentsMultiagentRosterEntryParams]
-    public let type = "coordinator"
-
-    public init(agents: [BetaManagedAgentsMultiagentRosterEntryParams]) {
-        self.agents = agents
     }
 }

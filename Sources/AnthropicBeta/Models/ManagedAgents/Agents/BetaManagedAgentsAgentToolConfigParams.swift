@@ -107,19 +107,22 @@ public struct BetaManagedAgentsWebFetchToolConfigParams: Encodable, Sendable, Eq
     public let allowedDomains: [String]?
     public let blockedDomains: [String]?
     public let maxContentTokens: Int?
+    public let urlSources: WebFetchURLSourcesParam?
 
     public init(
         enabled: Bool? = nil,
         permissionPolicy: BetaManagedAgentsPermissionPolicy? = nil,
         allowedDomains: [String]? = nil,
         blockedDomains: [String]? = nil,
-        maxContentTokens: Int? = nil
+        maxContentTokens: Int? = nil,
+        urlSources: WebFetchURLSourcesParam? = nil
     ) {
         self.enabled = enabled
         self.permissionPolicy = permissionPolicy
         self.allowedDomains = allowedDomains
         self.blockedDomains = blockedDomains
         self.maxContentTokens = maxContentTokens
+        self.urlSources = urlSources
     }
 }
 

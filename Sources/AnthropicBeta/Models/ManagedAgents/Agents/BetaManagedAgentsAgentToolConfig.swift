@@ -125,6 +125,7 @@ public struct BetaManagedAgentsWebFetchToolConfig: Codable, Sendable, Equatable 
     public let allowedDomains: [String]?
     public let blockedDomains: [String]?
     public let maxContentTokens: Int?
+    public let urlSources: BetaManagedAgentsWebFetchURLSources?
 
     public init(
         enabled: Bool,
@@ -133,7 +134,8 @@ public struct BetaManagedAgentsWebFetchToolConfig: Codable, Sendable, Equatable 
         type: String = "web_fetch",
         allowedDomains: [String]? = nil,
         blockedDomains: [String]? = nil,
-        maxContentTokens: Int? = nil
+        maxContentTokens: Int? = nil,
+        urlSources: BetaManagedAgentsWebFetchURLSources? = nil
     ) {
         self.enabled = enabled
         self.name = name
@@ -142,6 +144,7 @@ public struct BetaManagedAgentsWebFetchToolConfig: Codable, Sendable, Equatable 
         self.allowedDomains = allowedDomains
         self.blockedDomains = blockedDomains
         self.maxContentTokens = maxContentTokens
+        self.urlSources = urlSources
     }
 }
 

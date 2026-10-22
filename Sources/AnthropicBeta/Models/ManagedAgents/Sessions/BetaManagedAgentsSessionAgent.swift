@@ -12,7 +12,7 @@ public struct BetaManagedAgentsSessionAgent: Codable, Sendable, Equatable {
     public let executionIdentity: BetaManagedAgentsExecutionIdentity?
     public let mcpServers: [BetaManagedAgentsMCPServerURLDefinition]
     public let model: BetaManagedAgentsModelConfig
-    public let multiagent: BetaManagedAgentsSessionMultiagentCoordinator?
+    public let multiagent: BetaManagedAgentsSessionMultiagent?
     public let name: String
     public let skills: [BetaManagedAgentsSkill]
     public let system: String?
@@ -26,7 +26,7 @@ public struct BetaManagedAgentsSessionAgent: Codable, Sendable, Equatable {
         executionIdentity: BetaManagedAgentsExecutionIdentity? = nil,
         mcpServers: [BetaManagedAgentsMCPServerURLDefinition],
         model: BetaManagedAgentsModelConfig,
-        multiagent: BetaManagedAgentsSessionMultiagentCoordinator? = nil,
+        multiagent: BetaManagedAgentsSessionMultiagent? = nil,
         name: String,
         skills: [BetaManagedAgentsSkill],
         system: String? = nil,
