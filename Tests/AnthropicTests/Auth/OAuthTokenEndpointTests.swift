@@ -208,4 +208,97 @@ final class OAuthTokenEndpointTests: XCTestCase {
             // expected
         }
     }
+
+    // MARK: - redirects
+
+    /// Answers the token endpoint with a 307 to `leakHost`, and answers `leakHost` with a valid token
+    /// -- so a client that follows the redirect both "succeeds" and records the leak.
+    private final class RedirectingURLProtocol: URLProtocol {
+        static let leakHost = "collector.example"
+        static var requestedURLs: [URL] = []
+        static var leakedBody: Data?
+
+        override class func canInit(with request: URLRequest) -> Bool { true }
+        override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+        override func startLoading() {
+            let url = request.url!
+            Self.requestedURLs.append(url)
+            if url.host == Self.leakHost {
+                Self.leakedBody = request.httpBody ?? request.httpBodyStream.flatMap(Self.drain)
+                let body = Data(#"{"access_token":"leaked","expires_in":3600,"token_type":"Bearer"}"#.utf8)
+                let ok = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!
+                client?.urlProtocol(self, didReceive: ok, cacheStoragePolicy: .notAllowed)
+                client?.urlProtocol(self, didLoad: body)
+                client?.urlProtocolDidFinishLoading(self)
+                return
+            }
+            let target = URL(string: "https://\(Self.leakHost)/collect")!
+            let redirect = HTTPURLResponse(
+                url: url, statusCode: 307, httpVersion: nil, headerFields: ["Location": target.absoluteString]
+            )!
+            var next = URLRequest(url: target)
+            next.httpMethod = request.httpMethod
+            next.httpBody = request.httpBody ?? request.httpBodyStream.flatMap(Self.drain)
+            client?.urlProtocol(self, wasRedirectedTo: next, redirectResponse: redirect)
+            // If the task delegate declines the redirect, URLSession falls back to this response as
+            // the final one -- a custom protocol has to supply it, a real network stack does not.
+            client?.urlProtocol(self, didReceive: redirect, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: Data())
+            client?.urlProtocolDidFinishLoading(self)
+        }
+
+        override func stopLoading() {}
+
+        private static func drain(_ stream: InputStream) -> Data {
+            stream.open()
+            defer { stream.close() }
+            var data = Data()
+            var buffer = [UInt8](repeating: 0, count: 4096)
+            while stream.hasBytesAvailable {
+                let read = stream.read(&buffer, maxLength: buffer.count)
+                guard read > 0 else { break }
+                data.append(buffer, count: read)
+            }
+            return data
+        }
+    }
+
+    func testTokenExchangeDoesNotFollowARedirectSoTheAssertionCannotBeForwarded() async throws {
+        RedirectingURLProtocol.requestedURLs = []
+        RedirectingURLProtocol.leakedBody = nil
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [RedirectingURLProtocol.self]
+
+        do {
+            _ = try await OAuthTokenEndpoint.exchangeJWTBearer(
+                baseURL: baseURL, assertion: "secret-jwt", federationRuleId: "rule-1",
+                organizationId: "org-1", serviceAccountId: nil, workspaceId: nil,
+                urlSession: URLSession(configuration: configuration)
+            )
+            XCTFail("a redirected token exchange must fail, not succeed against the redirect target")
+        } catch AnthropicError.authentication(let detail) {
+            XCTAssertEqual(detail.statusCode, 307)
+        }
+
+        XCTAssertEqual(RedirectingURLProtocol.requestedURLs.map(\.host), ["api.anthropic.com"])
+        XCTAssertNil(RedirectingURLProtocol.leakedBody)
+    }
+
+    func testRefreshTokenExchangeDoesNotFollowARedirectEither() async throws {
+        RedirectingURLProtocol.requestedURLs = []
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [RedirectingURLProtocol.self]
+
+        do {
+            _ = try await OAuthTokenEndpoint.exchangeRefreshToken(
+                baseURL: baseURL, refreshToken: "secret-refresh", clientId: "client-1",
+                urlSession: URLSession(configuration: configuration)
+            )
+            XCTFail("a redirected refresh must fail")
+        } catch AnthropicError.authentication {
+            // expected
+        }
+        XCTAssertEqual(RedirectingURLProtocol.requestedURLs.map(\.host), ["api.anthropic.com"])
+    }
 }

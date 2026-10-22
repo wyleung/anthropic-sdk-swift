@@ -85,6 +85,22 @@ enum OAuthTokenEndpoint {
         let refreshToken: String?
     }
 
+    /// Declines every redirect, so a 3xx surfaces as an ordinary failed exchange. The request body
+    /// carries a secret (the identity-token assertion, or a refresh token), and `URLSession` follows
+    /// 307/308 with method and body intact -- it would hand that secret to whatever `Location` names.
+    /// TypeScript 0.134.0 fixed the same hole with `redirect: 'manual'`; Python's httpx never follows.
+    private final class RefuseRedirects: NSObject, URLSessionTaskDelegate {
+        func urlSession(
+            _ session: URLSession,
+            task: URLSessionTask,
+            willPerformHTTPRedirection response: HTTPURLResponse,
+            newRequest request: URLRequest,
+            completionHandler: @escaping (URLRequest?) -> Void
+        ) {
+            completionHandler(nil)
+        }
+    }
+
     private static func post(
         baseURL: URL, body: [String: Any], betaHeader: String, urlSession: URLSession
     ) async throws -> (Data, HTTPURLResponse) {
@@ -97,7 +113,7 @@ enum OAuthTokenEndpoint {
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await urlSession.data(for: request)
+            (data, response) = try await urlSession.data(for: request, delegate: RefuseRedirects())
         } catch let urlError as URLError where urlError.code == .timedOut {
             throw AnthropicError.timeout(message: AnthropicError.defaultTimeoutMessage)
         } catch {
