@@ -3,6 +3,9 @@ import Foundation
 package struct HTTPTransport: Sendable {
     private static let initialRetryDelay: TimeInterval = 0.5
     private static let maxRetryDelay: TimeInterval = 8.0
+    /// Upper bound on a honored `Retry-After`, matching Python's `min(retry_after, 4_294_967.0)`.
+    /// Mostly a guard: `Double("inf")` parses, and `UInt64(.infinity * 1e9)` would trap in `Task.sleep`.
+    static let maxHonoredRetryAfter: TimeInterval = 4_294_967
 
     let client: AnthropicClient
 
@@ -155,6 +158,7 @@ package struct HTTPTransport: Sendable {
         accept: String? = nil,
         options: RequestOptions
     ) async throws -> URLRequest {
+        try Self.requireNonEmptySegments(in: path)
         var request = URLRequest(
             url: Self.applying(
                 query: query, arrayQuery: arrayQuery, to: Self.resolvedURL(path, baseURL: client.baseURL)
@@ -187,6 +191,22 @@ package struct HTTPTransport: Sendable {
             request.setValue(value, forHTTPHeaderField: key)
         }
         return request
+    }
+
+    /// An id interpolated into a path template as `""` leaves an empty segment (`v1/files/`,
+    /// `v1/files//content`), which silently addresses a *different* endpoint -- `files.retrieve("")`
+    /// would hit the list endpoint and fail later with a confusing decode error. Python raises
+    /// "Expected a non-empty value for `file_id`" and TypeScript 0.132.1 throws before sending;
+    /// no legitimate path has an empty segment, so one check here covers every resource method.
+    /// Absolute URLs (`MessageBatch.resultsURL`) are server-supplied and exempt.
+    private static func requireNonEmptySegments(in path: String) throws {
+        if let url = URL(string: path), url.scheme != nil { return }
+        let relative = path.hasPrefix("/") ? String(path.dropFirst()) : path
+        if relative.split(separator: "/", omittingEmptySubsequences: false).contains(where: \.isEmpty) {
+            throw AnthropicError.invalidArgument(
+                message: "Expected a non-empty value for a path parameter, but the request path was \"\(path)\"."
+            )
+        }
     }
 
     /// `MessageBatch.resultsURL` is already a full URL returned by the server, unlike every other
@@ -309,8 +329,11 @@ package struct HTTPTransport: Sendable {
     /// than inferring it from elapsed wall-clock time (whose buggy-vs-fixed ranges touch at the
     /// same boundary value and would make a timing-based regression test flaky).
     static func backoffDelay(attempt: Int, retryAfter: TimeInterval?) -> TimeInterval {
-        if let retryAfter, retryAfter >= 0, retryAfter <= 60 {
-            return retryAfter
+        // A positive server-supplied delay is honored as given, however long (Python 1.6.0 / TS
+        // dropped the old 60s ceiling). Zero, negative, NaN (every comparison false) and absent
+        // values fall through to the default backoff rather than retrying immediately.
+        if let retryAfter, retryAfter > 0 {
+            return min(retryAfter, maxHonoredRetryAfter)
         }
         let exponential = min(initialRetryDelay * pow(2.0, Double(attempt - 1)), maxRetryDelay)
         return exponential * (1 - Double.random(in: 0...0.25))

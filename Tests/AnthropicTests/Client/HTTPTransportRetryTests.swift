@@ -103,6 +103,30 @@ final class HTTPTransportRetryTests: XCTestCase {
         }
     }
 
+    func testRetryAfterAboveSixtySecondsIsHonoredNotReplacedByDefaultBackoff() {
+        // Upstream dropped the old 60s ceiling (Python 1.6.0): a server asking for 2 minutes gets 2 minutes.
+        XCTAssertEqual(HTTPTransport.backoffDelay(attempt: 1, retryAfter: 120), 120)
+        XCTAssertEqual(HTTPTransport.backoffDelay(attempt: 3, retryAfter: 3600), 3600)
+    }
+
+    func testNonPositiveOrNaNRetryAfterFallsBackToDefaultBackoffInsteadOfRetryingImmediately() {
+        // `Retry-After: 0`, a date already in the past (parsed to 0), and garbage that parses to
+        // NaN must all use the exponential schedule -- previously 0 meant "retry with no delay".
+        for retryAfter in [0, -5, TimeInterval.nan] {
+            let delay = HTTPTransport.backoffDelay(attempt: 1, retryAfter: retryAfter)
+            XCTAssertLessThanOrEqual(delay, 0.5, "retryAfter=\(retryAfter)")
+            XCTAssertGreaterThanOrEqual(delay, 0.375, "retryAfter=\(retryAfter)")
+        }
+    }
+
+    func testAbsurdRetryAfterIsClampedSoTaskSleepNanosecondConversionCannotTrap() {
+        // `Double("inf")` parses, and `UInt64(.infinity * 1e9)` is a runtime trap -- the clamp is
+        // what makes lifting the 60s ceiling safe.
+        XCTAssertEqual(HTTPTransport.backoffDelay(attempt: 1, retryAfter: .infinity), HTTPTransport.maxHonoredRetryAfter)
+        XCTAssertEqual(HTTPTransport.backoffDelay(attempt: 1, retryAfter: 1e300), HTTPTransport.maxHonoredRetryAfter)
+        XCTAssertLessThan(UInt64(HTTPTransport.maxHonoredRetryAfter * 1_000_000_000), UInt64.max)
+    }
+
     func testUnderlyingCancelledURLErrorSurfacesAsCancellationErrorAndIsNotRetried() async throws {
         // Fix #6: `URLError.cancelled` must not fall into the generic catch that produces
         // `AnthropicError.connection` (which `withRetries` would then retry) -- it should surface

@@ -29,6 +29,9 @@ public enum AnthropicError: Error, Sendable {
     case timeout(message: String)
     case responseValidation(message: String, body: JSONValue?)
     case webhookValidation(message: String)
+    /// The caller passed something the SDK refuses to send -- e.g. an empty id for a path
+    /// parameter. Thrown before any request is made; the Swift counterpart of Python's `ValueError`.
+    case invalidArgument(message: String)
 
     public static let defaultConnectionMessage = "Connection error."
     public static let defaultTimeoutMessage =
@@ -44,7 +47,7 @@ public enum AnthropicError: Error, Sendable {
              .overloaded(let detail), .deadlineExceeded(let detail), .internalServer(let detail),
              .apiStatus(let detail):
             return detail
-        case .connection, .timeout, .responseValidation, .webhookValidation:
+        case .connection, .timeout, .responseValidation, .webhookValidation, .invalidArgument:
             return nil
         }
     }
@@ -129,6 +132,7 @@ extension AnthropicError: CustomStringConvertible {
         case .timeout(let message): return message
         case .responseValidation(let message, _): return message
         case .webhookValidation(let message): return message
+        case .invalidArgument(let message): return message
         default: return detail?.message ?? String(describing: self)
         }
     }

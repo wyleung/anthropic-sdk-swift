@@ -40,4 +40,65 @@ final class PathInjectionTests: XCTestCase {
         let client = AnthropicClient(apiKey: "test-key", urlSession: MockURLProtocol.makeSession())
         _ = try await client.files.delete(maliciousId)
     }
+
+    // MARK: - empty ids
+
+    /// Runs `call` against a client whose transport counts requests, and asserts it throws
+    /// `.invalidArgument` *without* anything reaching the wire.
+    private func assertRejectedBeforeAnyRequest(
+        file: StaticString = #filePath, line: UInt = #line,
+        _ call: (AnthropicClient) async throws -> Void
+    ) async {
+        var requestCount = 0
+        MockURLProtocol.responder = { _ in
+            requestCount += 1
+            return self.jsonResponse(Data("{}".utf8))
+        }
+        let client = AnthropicClient(apiKey: "test-key", urlSession: MockURLProtocol.makeSession())
+        do {
+            try await call(client)
+            XCTFail("expected AnthropicError.invalidArgument", file: file, line: line)
+        } catch AnthropicError.invalidArgument(let message) {
+            XCTAssertTrue(message.contains("non-empty"), message, file: file, line: line)
+        } catch {
+            XCTFail("expected AnthropicError.invalidArgument, got \(error)", file: file, line: line)
+        }
+        XCTAssertEqual(requestCount, 0, "an empty id must never reach the network", file: file, line: line)
+    }
+
+    func testEmptyIdIsRejectedBeforeSendingAcrossResourceFamilies() async {
+        // `files.retrieveMetadata("")` used to request `v1/files/` -- the *list* endpoint.
+        await assertRejectedBeforeAnyRequest { _ = try await $0.files.retrieveMetadata("") }
+        await assertRejectedBeforeAnyRequest { _ = try await $0.files.delete("") }
+        await assertRejectedBeforeAnyRequest { _ = try await $0.files.download("") }
+        await assertRejectedBeforeAnyRequest { _ = try await $0.models.retrieve("") }
+        await assertRejectedBeforeAnyRequest { _ = try await $0.messages.batches.retrieve("") }
+        await assertRejectedBeforeAnyRequest { _ = try await $0.messages.batches.cancel("") }
+        await assertRejectedBeforeAnyRequest { _ = try await $0.skills.retrieve("") }
+    }
+
+    func testEmptyIdInTheMiddleOfANestedPathIsRejectedToo() async {
+        // `v1/skills//versions/v1` and `v1/skills/skill_1/versions/` both contain an empty segment.
+        await assertRejectedBeforeAnyRequest { _ = try await $0.skills.versions.retrieve("v1", skillId: "") }
+        await assertRejectedBeforeAnyRequest { _ = try await $0.skills.versions.retrieve("", skillId: "skill_1") }
+    }
+
+    func testNonEmptyIdsAndServerSuppliedAbsoluteURLsAreStillSent() async throws {
+        var requestedURLs: [String] = []
+        MockURLProtocol.responder = { request in
+            requestedURLs.append(request.url!.absoluteString)
+            return self.jsonResponse(#"{"id": "file_1", "type": "file_deleted"}"#.data(using: .utf8)!)
+        }
+        let client = AnthropicClient(apiKey: "test-key", urlSession: MockURLProtocol.makeSession())
+        _ = try await client.files.delete("file_1")
+        // `https://` itself contains an empty path segment ("https:" / "" / host) -- absolute URLs,
+        // like `MessageBatch.resultsURL`, must be exempt from the empty-segment check.
+        _ = try await client.transport.getData(
+            path: "https://api.anthropic.com/v1/messages/batches/msgbatch_1/results", accept: nil, options: RequestOptions()
+        )
+        XCTAssertEqual(requestedURLs, [
+            "https://api.anthropic.com/v1/files/file_1",
+            "https://api.anthropic.com/v1/messages/batches/msgbatch_1/results",
+        ])
+    }
 }
