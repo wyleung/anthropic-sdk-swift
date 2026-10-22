@@ -59,15 +59,18 @@ public struct BetaManagedAgentsSessionStatusIdleEvent: Codable, Sendable, Equata
     public let id: String
     public let processedAt: String
     public let stopReason: BetaManagedAgentsSessionStopReason
+    /// Why the model refused, when `stopReason` is `.refusal`.
+    public let stopDetails: BetaManagedAgentsSessionRefusalStopDetails?
     public let type: String
 
     public init(
         id: String, processedAt: String, stopReason: BetaManagedAgentsSessionStopReason,
-        type: String = "session.status_idle"
+        stopDetails: BetaManagedAgentsSessionRefusalStopDetails? = nil, type: String = "session.status_idle"
     ) {
         self.id = id
         self.processedAt = processedAt
         self.stopReason = stopReason
+        self.stopDetails = stopDetails
         self.type = type
     }
 }
@@ -94,16 +97,19 @@ public struct BetaManagedAgentsSessionThreadCreatedEvent: Codable, Sendable, Equ
     public let processedAt: String
     public let sessionThreadId: String
     public let type: String
+    /// The workflow run that spawned this thread, if any.
+    public let workflowRunId: String?
 
     public init(
         agentName: String, id: String, processedAt: String, sessionThreadId: String,
-        type: String = "session.thread_created"
+        type: String = "session.thread_created", workflowRunId: String? = nil
     ) {
         self.agentName = agentName
         self.id = id
         self.processedAt = processedAt
         self.sessionThreadId = sessionThreadId
         self.type = type
+        self.workflowRunId = workflowRunId
     }
 }
 
@@ -149,17 +155,21 @@ public struct BetaManagedAgentsSessionThreadStatusIdleEvent: Codable, Sendable, 
     public let processedAt: String
     public let sessionThreadId: String
     public let stopReason: BetaManagedAgentsSessionStopReason
+    /// Why the model refused, when `stopReason` is `.refusal`.
+    public let stopDetails: BetaManagedAgentsSessionRefusalStopDetails?
     public let type: String
 
     public init(
         agentName: String, id: String, processedAt: String, sessionThreadId: String,
-        stopReason: BetaManagedAgentsSessionStopReason, type: String = "session.thread_status_idle"
+        stopReason: BetaManagedAgentsSessionStopReason, stopDetails: BetaManagedAgentsSessionRefusalStopDetails? = nil,
+        type: String = "session.thread_status_idle"
     ) {
         self.agentName = agentName
         self.id = id
         self.processedAt = processedAt
         self.sessionThreadId = sessionThreadId
         self.stopReason = stopReason
+        self.stopDetails = stopDetails
         self.type = type
     }
 }

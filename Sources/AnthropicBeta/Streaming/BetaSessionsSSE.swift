@@ -2,37 +2,49 @@ import Foundation
 import Anthropic
 
 /// Translates decoded SSE messages into `BetaManagedAgentsStreamSessionEvents` for the Managed
-/// Agents session event stream (`client.beta.sessions.events.stream`). Same
-/// `ping`/`error`/forward-compatible-drop handling and `type`-injection as `BetaMessagesSSE` --
-/// ported from the shared event-name dispatch in Python's generic `Stream.__stream__`
-/// (`_streaming.py`), scoped down to just the event names that appear in
-/// `BetaManagedAgentsStreamSessionEvents`'s 37-member union.
+/// Agents session event stream (`client.beta.sessions.events.stream`). Same `ping`/`error` handling and
+/// `type`-injection as `BetaMessagesSSE`.
+///
+/// Every named event with data is decoded: a name this port models into its typed case, anything else
+/// into `.unknown(type:raw:)`. This used to be a hard-coded allowlist whose `default` dropped the rest,
+/// so each new event type (the `workflow_run.*` family is the latest) was silently swallowed until
+/// someone remembered to add its name here. Python 1.16.0 / TypeScript 0.136.0 removed the same
+/// allowlist from their generic `Stream.__stream__`.
 enum BetaSessionsSSE {
+    /// The event names with typed cases. A *malformed* payload under one of these is a protocol fault
+    /// and throws; under any other name it degrades to `.unknown` instead of failing the stream.
+    private static let knownEventNames: Set<String> = [
+        "user.message", "user.interrupt", "user.tool_confirmation", "user.custom_tool_result",
+        "agent.custom_tool_use", "agent.message", "agent.thinking", "agent.mcp_tool_use",
+        "agent.mcp_tool_result", "agent.tool_use", "agent.tool_result",
+        "agent.thread_message_received", "agent.thread_message_sent",
+        "agent.thread_context_compacted", "session.error", "session.status_rescheduled",
+        "session.status_running", "session.status_idle", "session.status_terminated",
+        "session.thread_created", "span.outcome_evaluation_start", "span.outcome_evaluation_end",
+        "span.model_request_start", "span.model_request_end", "span.outcome_evaluation_ongoing",
+        "user.define_outcome", "session.deleted", "session.thread_status_running",
+        "session.thread_status_idle", "session.thread_status_terminated", "user.tool_result",
+        "session.thread_status_rescheduled", "session.updated", "event_start", "event_delta",
+        "system.message", "session.usage",
+        "workflow_run.created", "workflow_run.status_running", "workflow_run.status_idle",
+        "workflow_run.status_ended", "workflow_run.error", "workflow_run.phase_started",
+        "workflow_run.phase_ended",
+    ]
+
     static func translate(
         _ sse: ServerSentEvent, response: HTTPURLResponse
     ) throws -> BetaManagedAgentsStreamSessionEvents? {
-        switch sse.event {
-        case "ping":
-            return nil
-        case "error":
+        guard let event = sse.event, event != "ping" else { return nil }
+        if event == "error" {
             let body = try? HTTPTransport.decoder.decode(JSONValue.self, from: Data(sse.data.utf8))
             throw AnthropicError.from(response: response, body: body)
-        case "user.message", "user.interrupt", "user.tool_confirmation", "user.custom_tool_result",
-            "agent.custom_tool_use", "agent.message", "agent.thinking", "agent.mcp_tool_use",
-            "agent.mcp_tool_result", "agent.tool_use", "agent.tool_result",
-            "agent.thread_message_received", "agent.thread_message_sent",
-            "agent.thread_context_compacted", "session.error", "session.status_rescheduled",
-            "session.status_running", "session.status_idle", "session.status_terminated",
-            "session.thread_created", "span.outcome_evaluation_start", "span.outcome_evaluation_end",
-            "span.model_request_start", "span.model_request_end", "span.outcome_evaluation_ongoing",
-            "user.define_outcome", "session.deleted", "session.thread_status_running",
-            "session.thread_status_idle", "session.thread_status_terminated", "user.tool_result",
-            "session.thread_status_rescheduled", "session.updated", "event_start", "event_delta",
-            "system.message", "session.usage":
-            let data = try injectingType(sse.data, from: sse.event)
+        }
+        guard !sse.data.isEmpty else { return nil }
+        do {
+            let data = try injectingType(sse.data, from: event)
             return try HTTPTransport.decoder.decode(BetaManagedAgentsStreamSessionEvents.self, from: data)
-        default:
-            return nil
+        } catch where !knownEventNames.contains(event) {
+            return .unknown(type: event, raw: .string(sse.data))
         }
     }
 

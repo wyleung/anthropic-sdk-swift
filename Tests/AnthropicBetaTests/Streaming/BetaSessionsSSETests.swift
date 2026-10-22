@@ -13,9 +13,53 @@ final class BetaSessionsSSETests: XCTestCase {
         XCTAssertNil(try BetaSessionsSSE.translate(sse, response: response))
     }
 
-    func testTranslateDropsUnrecognizedEventNames() throws {
-        let sse = ServerSentEvent(event: "agent.something_new", data: "{}", raw: [])
-        XCTAssertNil(try BetaSessionsSSE.translate(sse, response: response))
+    func testTranslateSurfacesUnrecognizedEventNamesAsUnknownInsteadOfDroppingThem() throws {
+        // A hard-coded allowlist used to swallow every event type added after this port; Python 1.16.0 and
+        // TypeScript 0.136.0 now yield them.
+        let sse = ServerSentEvent(event: "agent.something_new", data: #"{"note": "hi"}"#, raw: [])
+        guard case .unknown(let type, let raw) = try BetaSessionsSSE.translate(sse, response: response) else {
+            return XCTFail("expected .unknown")
+        }
+        XCTAssertEqual(type, "agent.something_new")
+        XCTAssertEqual(raw["note"]?.stringValue, "hi")
+    }
+
+    func testTranslateHandsOverANonJSONPayloadOfAnUnrecognizedEventVerbatim() throws {
+        let sse = ServerSentEvent(event: "future.event", data: "not json", raw: [])
+        XCTAssertEqual(
+            try BetaSessionsSSE.translate(sse, response: response), .unknown(type: "future.event", raw: .string("not json"))
+        )
+    }
+
+    func testTranslateStillThrowsOnAMalformedPayloadUnderAKnownEventName() {
+        let sse = ServerSentEvent(event: "agent.tool_use", data: "not json", raw: [])
+        XCTAssertThrowsError(try BetaSessionsSSE.translate(sse, response: response))
+    }
+
+    func testTranslateSkipsEventsWithNoData() throws {
+        XCTAssertNil(try BetaSessionsSSE.translate(ServerSentEvent(event: "agent.tool_use", data: "", raw: []), response: response))
+        XCTAssertNil(try BetaSessionsSSE.translate(ServerSentEvent(event: "future.event", data: "", raw: []), response: response))
+    }
+
+    func testEveryWorkflowRunEventNameReachesTheStreamAsATypedEvent() throws {
+        // The regression this guards: with the old allowlist, none of these were delivered at all.
+        let names = [
+            "workflow_run.created", "workflow_run.status_running", "workflow_run.status_idle", "workflow_run.status_ended",
+            "workflow_run.error", "workflow_run.phase_started", "workflow_run.phase_ended",
+        ]
+        let bodies = [
+            #"{"id":"e","processed_at":"t","name":"wf","phases":[{"id":"p1","name":"Plan"}],"workflow_run_id":"wfr_1"}"#,
+            #"{"id":"e","processed_at":"t","workflow_run_id":"wfr_1"}"#,
+            #"{"id":"e","processed_at":"t","workflow_run_id":"wfr_1"}"#,
+            #"{"id":"e","processed_at":"t","workflow_run_id":"wfr_1","result":{"type":"completed"}}"#,
+            #"{"id":"e","processed_at":"t","error":{"type":"program_error","message":"boom"}}"#,
+            #"{"id":"e","processed_at":"t","workflow_run_id":"wfr_1","workflow_run_phase_id":"p1"}"#,
+            #"{"id":"e","processed_at":"t","phase_started_id":"e0","workflow_run_id":"wfr_1","workflow_run_phase_id":"p1"}"#,
+        ]
+        for (name, body) in zip(names, bodies) {
+            let event = try XCTUnwrap(try BetaSessionsSSE.translate(ServerSentEvent(event: name, data: body, raw: []), response: response), name)
+            if case .unknown = event { XCTFail("\(name) fell through to .unknown") }
+        }
     }
 
     func testTranslateDropsEventsWithNoEventName() throws {

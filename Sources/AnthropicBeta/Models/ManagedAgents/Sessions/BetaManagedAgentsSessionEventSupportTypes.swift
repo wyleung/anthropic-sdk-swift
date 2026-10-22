@@ -217,6 +217,11 @@ public enum BetaManagedAgentsSessionEventError: Sendable, Equatable {
     case mcpAuthenticationFailed(BetaManagedAgentsMCPAuthenticationFailedError)
     case billing(BetaManagedAgentsBillingError)
     case credentialHostUnreachable(BetaManagedAgentsCredentialHostUnreachableError)
+    case repositoryAuthentication(BetaManagedAgentsRepositoryAuthenticationError)
+    case repositoryForbidden(BetaManagedAgentsRepositoryForbiddenError)
+    case repositoryNotFound(BetaManagedAgentsRepositoryNotFoundError)
+    case repositoryCheckout(BetaManagedAgentsRepositoryCheckoutError)
+    case repositoryClone(BetaManagedAgentsRepositoryCloneError)
     case unknown(type: String, raw: JSONValue)
 }
 
@@ -243,6 +248,16 @@ extension BetaManagedAgentsSessionEventError: Codable {
         case "billing_error": self = .billing(try BetaManagedAgentsBillingError(from: decoder))
         case "credential_host_unreachable_error":
             self = .credentialHostUnreachable(try BetaManagedAgentsCredentialHostUnreachableError(from: decoder))
+        case "repository_authentication_error":
+            self = .repositoryAuthentication(try BetaManagedAgentsRepositoryAuthenticationError(from: decoder))
+        case "repository_forbidden_error":
+            self = .repositoryForbidden(try BetaManagedAgentsRepositoryForbiddenError(from: decoder))
+        case "repository_not_found_error":
+            self = .repositoryNotFound(try BetaManagedAgentsRepositoryNotFoundError(from: decoder))
+        case "repository_checkout_error":
+            self = .repositoryCheckout(try BetaManagedAgentsRepositoryCheckoutError(from: decoder))
+        case "repository_clone_error":
+            self = .repositoryClone(try BetaManagedAgentsRepositoryCloneError(from: decoder))
         default: self = .unknown(type: type, raw: try JSONValue(from: decoder))
         }
     }
@@ -257,6 +272,11 @@ extension BetaManagedAgentsSessionEventError: Codable {
         case .mcpAuthenticationFailed(let value): try value.encode(to: encoder)
         case .billing(let value): try value.encode(to: encoder)
         case .credentialHostUnreachable(let value): try value.encode(to: encoder)
+        case .repositoryAuthentication(let value): try value.encode(to: encoder)
+        case .repositoryForbidden(let value): try value.encode(to: encoder)
+        case .repositoryNotFound(let value): try value.encode(to: encoder)
+        case .repositoryCheckout(let value): try value.encode(to: encoder)
+        case .repositoryClone(let value): try value.encode(to: encoder)
         case .unknown(_, let raw): try raw.encode(to: encoder)
         }
     }
@@ -315,6 +335,7 @@ public enum BetaManagedAgentsSessionStopReason: Sendable, Equatable {
     case requiresAction(BetaManagedAgentsSessionRequiresAction)
     case retriesExhausted(BetaManagedAgentsSessionRetriesExhausted)
     case budgetReached(BetaManagedAgentsSessionBudgetReached)
+    case refusal(BetaManagedAgentsSessionRefusal)
     case unknown(type: String, raw: JSONValue)
 }
 
@@ -332,6 +353,7 @@ extension BetaManagedAgentsSessionStopReason: Codable {
         case "retries_exhausted":
             self = .retriesExhausted(try BetaManagedAgentsSessionRetriesExhausted(from: decoder))
         case "budget_reached": self = .budgetReached(try BetaManagedAgentsSessionBudgetReached(from: decoder))
+        case "refusal": self = .refusal(try BetaManagedAgentsSessionRefusal(from: decoder))
         default: self = .unknown(type: type, raw: try JSONValue(from: decoder))
         }
     }
@@ -342,6 +364,7 @@ extension BetaManagedAgentsSessionStopReason: Codable {
         case .requiresAction(let value): try value.encode(to: encoder)
         case .retriesExhausted(let value): try value.encode(to: encoder)
         case .budgetReached(let value): try value.encode(to: encoder)
+        case .refusal(let value): try value.encode(to: encoder)
         case .unknown(_, let raw): try raw.encode(to: encoder)
         }
     }

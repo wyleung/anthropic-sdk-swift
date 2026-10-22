@@ -145,6 +145,13 @@ public enum BetaManagedAgentsStreamSessionEvents: Sendable, Equatable {
     case deltaEvent(BetaManagedAgentsDeltaEvent)
     case systemMessage(BetaManagedAgentsSystemMessageEvent)
     case sessionUsage(BetaManagedAgentsSessionUsageEvent)
+    case workflowRunCreated(BetaManagedAgentsWorkflowRunCreatedEvent)
+    case workflowRunStatusRunning(BetaManagedAgentsWorkflowRunStatusRunningEvent)
+    case workflowRunStatusIdle(BetaManagedAgentsWorkflowRunStatusIdleEvent)
+    case workflowRunStatusEnded(BetaManagedAgentsWorkflowRunStatusEndedEvent)
+    case workflowRunError(BetaManagedAgentsWorkflowRunErrorEvent)
+    case workflowRunPhaseStarted(BetaManagedAgentsWorkflowRunPhaseStartedEvent)
+    case workflowRunPhaseEnded(BetaManagedAgentsWorkflowRunPhaseEndedEvent)
     case unknown(type: String, raw: JSONValue)
 }
 
@@ -227,6 +234,20 @@ extension BetaManagedAgentsStreamSessionEvents: Codable {
         case "event_delta": self = .deltaEvent(try BetaManagedAgentsDeltaEvent(from: decoder))
         case "system.message": self = .systemMessage(try BetaManagedAgentsSystemMessageEvent(from: decoder))
         case "session.usage": self = .sessionUsage(try BetaManagedAgentsSessionUsageEvent(from: decoder))
+        case "workflow_run.created":
+            self = .workflowRunCreated(try BetaManagedAgentsWorkflowRunCreatedEvent(from: decoder))
+        case "workflow_run.status_running":
+            self = .workflowRunStatusRunning(try BetaManagedAgentsWorkflowRunStatusRunningEvent(from: decoder))
+        case "workflow_run.status_idle":
+            self = .workflowRunStatusIdle(try BetaManagedAgentsWorkflowRunStatusIdleEvent(from: decoder))
+        case "workflow_run.status_ended":
+            self = .workflowRunStatusEnded(try BetaManagedAgentsWorkflowRunStatusEndedEvent(from: decoder))
+        case "workflow_run.error":
+            self = .workflowRunError(try BetaManagedAgentsWorkflowRunErrorEvent(from: decoder))
+        case "workflow_run.phase_started":
+            self = .workflowRunPhaseStarted(try BetaManagedAgentsWorkflowRunPhaseStartedEvent(from: decoder))
+        case "workflow_run.phase_ended":
+            self = .workflowRunPhaseEnded(try BetaManagedAgentsWorkflowRunPhaseEndedEvent(from: decoder))
         default: self = .unknown(type: type, raw: try JSONValue(from: decoder))
         }
     }
@@ -270,6 +291,13 @@ extension BetaManagedAgentsStreamSessionEvents: Codable {
         case .deltaEvent(let value): try value.encode(to: encoder)
         case .systemMessage(let value): try value.encode(to: encoder)
         case .sessionUsage(let value): try value.encode(to: encoder)
+        case .workflowRunCreated(let value): try value.encode(to: encoder)
+        case .workflowRunStatusRunning(let value): try value.encode(to: encoder)
+        case .workflowRunStatusIdle(let value): try value.encode(to: encoder)
+        case .workflowRunStatusEnded(let value): try value.encode(to: encoder)
+        case .workflowRunError(let value): try value.encode(to: encoder)
+        case .workflowRunPhaseStarted(let value): try value.encode(to: encoder)
+        case .workflowRunPhaseEnded(let value): try value.encode(to: encoder)
         case .unknown(_, let raw): try raw.encode(to: encoder)
         }
     }

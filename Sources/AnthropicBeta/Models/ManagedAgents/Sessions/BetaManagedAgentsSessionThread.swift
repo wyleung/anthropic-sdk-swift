@@ -70,6 +70,8 @@ public struct BetaManagedAgentsSessionThread: Codable, Sendable, Equatable {
     public let type: String
     public let updatedAt: String
     public let usage: BetaManagedAgentsSessionThreadUsage?
+    /// The workflow run that spawned this thread, if any.
+    public let workflowRunId: String?
 
     public init(
         id: String,
@@ -82,7 +84,8 @@ public struct BetaManagedAgentsSessionThread: Codable, Sendable, Equatable {
         status: BetaManagedAgentsSessionStatus,
         type: String = "session_thread",
         updatedAt: String,
-        usage: BetaManagedAgentsSessionThreadUsage? = nil
+        usage: BetaManagedAgentsSessionThreadUsage? = nil,
+        workflowRunId: String? = nil
     ) {
         self.id = id
         self.agent = agent
@@ -95,5 +98,6 @@ public struct BetaManagedAgentsSessionThread: Codable, Sendable, Equatable {
         self.type = type
         self.updatedAt = updatedAt
         self.usage = usage
+        self.workflowRunId = workflowRunId
     }
 }
