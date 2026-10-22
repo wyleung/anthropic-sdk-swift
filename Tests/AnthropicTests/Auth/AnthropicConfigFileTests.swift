@@ -18,10 +18,36 @@ final class AnthropicConfigFileTests: XCTestCase {
 
     private var environment: [String: String] { ["ANTHROPIC_CONFIG_DIR": tempDir.path] }
 
-    private func writeConfig(_ json: String, profile: String = "default") throws {
+    @discardableResult
+    private func writeConfig(_ json: String, profile: String = "default", mode: Int = 0o644) throws -> URL {
         let path = tempDir.appendingPathComponent("configs/\(profile).json")
         try FileManager.default.createDirectory(at: path.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data(json.utf8).write(to: path)
+        // Explicit, not umask-derived: the loader refuses group/other-writable config files.
+        try FileManager.default.setAttributes([.posixPermissions: mode], ofItemAtPath: path.path)
+        return path
+    }
+
+    private let minimalProfile = #"{"authentication":{"type":"user_oauth","client_id":"client-1"}}"#
+
+    func testLoadRefusesConfigFileWritableByGroup() throws {
+        try writeConfig(minimalProfile, mode: 0o664)
+        XCTAssertThrowsError(try AnthropicConfigFile.load(profile: "default", environment: environment)) { error in
+            XCTAssertTrue("\(error)".contains("writable by group or others"), "\(error)")
+        }
+    }
+
+    func testLoadRefusesConfigFileWritableByOthers() throws {
+        try writeConfig(minimalProfile, mode: 0o606)
+        XCTAssertThrowsError(try AnthropicConfigFile.load(profile: "default", environment: environment))
+    }
+
+    func testLoadAcceptsGroupAndWorldReadableConfigFileBecauseItHoldsNoSecrets() throws {
+        // Only write bits matter for the non-secret config; `CredentialsStore` is the strict one.
+        try writeConfig(minimalProfile, mode: 0o644)
+        XCTAssertNotNil(try AnthropicConfigFile.load(profile: "default", environment: environment))
+        try writeConfig(minimalProfile, mode: 0o444)
+        XCTAssertNotNil(try AnthropicConfigFile.load(profile: "default", environment: environment))
     }
 
     func testLoadReturnsNilWhenFileIsMissing() throws {

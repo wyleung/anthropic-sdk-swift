@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(Darwin)
+import Darwin
+#endif
 
 /// Parses `configs/<profile>.json` -- non-secret profile configuration (as opposed to
 /// `credentials/<profile>.json`, which holds the access/refresh tokens). Ported from the reference
@@ -37,6 +40,7 @@ struct AnthropicConfigFile: Sendable {
     /// pure-env-var and WIF-env-var credential paths never touch disk), not an error.
     static func load(profile: String, environment: [String: String]) throws -> AnthropicConfigFile? {
         let path = try ProfilePaths.configFilePath(profile: profile, environment: environment)
+        try refuseIfWritableByGroupOrOthers(path)
         guard let data = try? Data(contentsOf: path) else { return nil }
         guard let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
             throw AnthropicError.responseValidation(
@@ -44,6 +48,25 @@ struct AnthropicConfigFile: Sendable {
             )
         }
         return try parse(object, environment: environment)
+    }
+
+    /// Python 1.10's `_load_config` refuses a config file that group or others can write (`mode & 0o022`):
+    /// the file supplies `base_url` and `credentials_path`, so one that others can edit can redirect
+    /// where credentials are sent or read from.
+    /// Unlike `CredentialsStore` this follows symlinks (`stat`, not `lstat`) and ignores read bits,
+    /// since the file holds no secrets. A missing or unstat-able file is left to the caller's usual
+    /// "no config" path.
+    private static func refuseIfWritableByGroupOrOthers(_ path: URL) throws {
+        var info = stat()
+        guard path.path.withCString({ stat($0, &info) }) == 0 else { return }
+        let permissionBits = info.st_mode & 0o7777
+        guard permissionBits & 0o022 == 0 else {
+            throw AnthropicError.responseValidation(
+                message: "Config file at \(path.path) is writable by group or others (mode " +
+                    "0o\(String(permissionBits, radix: 8))); run `chmod go-w \(path.path)` before retrying.",
+                body: nil
+            )
+        }
     }
 
     private static func parse(_ object: [String: Any], environment: [String: String]) throws -> AnthropicConfigFile {

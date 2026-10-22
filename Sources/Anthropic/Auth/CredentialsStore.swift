@@ -5,15 +5,14 @@ import Darwin
 
 /// Reads and writes `credentials/<profile>.json` -- the secret, flat token file (as opposed to the
 /// non-secret `configs/<profile>.json`). Ported from the reference SDKs' `_credentials_store.py` /
-/// `credentials-store.ts`, including their exact (and knowingly imperfect) file-safety checks --
-/// this is a deliberate "Python parity" choice confirmed with the maintainer rather than adopting
-/// TypeScript's stricter alternative or inventing a hybrid:
+/// `credentials-store.ts`, keeping "Python parity" for the file-safety checks (a deliberate choice
+/// confirmed with the maintainer rather than inventing a hybrid):
 ///
 /// - A symlink is refused outright, never followed -- checked via `lstat`, never `FileManager`
 ///   (which follows symlinks and can't express "reject if symlink").
-/// - World-readable (`mode & 0o004`) is a hard failure.
-/// - Any group bit (`mode & 0o070`) is a warning to stderr only, never a hard failure.
-/// - Write bits are never checked at all, on either the group or world triads.
+/// - Any group or other bit (`mode & 0o077`) is a hard failure -- read, write or execute. Python
+///   tightened to this in 1.5.0/1.10.0; this port originally mirrored the earlier, weaker check
+///   (refuse world-readable, only warn on group bits, never look at write bits).
 /// - No uid-ownership check.
 enum CredentialsStore {
     struct Credentials: Sendable {
@@ -107,17 +106,12 @@ enum CredentialsStore {
             )
         }
         let permissionBits = info.st_mode & 0o7777
-        guard permissionBits & 0o004 == 0 else {
+        guard permissionBits & 0o077 == 0 else {
             throw AnthropicError.responseValidation(
-                message: "Credentials file at \(path.path) is world-readable (mode " +
-                    "\(String(permissionBits, radix: 8))); refusing to read it.", body: nil
+                message: "Credentials file at \(path.path) is accessible by group or others (mode " +
+                    "0o\(String(permissionBits, radix: 8))); run `chmod 600 \(path.path)` before retrying.",
+                body: nil
             )
-        }
-        if permissionBits & 0o070 != 0, let stderrData = (
-            "Warning: credentials file at \(path.path) is group-accessible (mode " +
-                "\(String(permissionBits, radix: 8))).\n"
-        ).data(using: .utf8) {
-            FileHandle.standardError.write(stderrData)
         }
     }
 

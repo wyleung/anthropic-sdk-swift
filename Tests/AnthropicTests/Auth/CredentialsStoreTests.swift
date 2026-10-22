@@ -83,10 +83,30 @@ final class CredentialsStoreTests: XCTestCase {
         XCTAssertThrowsError(try CredentialsStore.read(profile: "default", environment: environment))
     }
 
-    func testReadWarnsButDoesNotThrowOnGroupReadableFile() throws {
+    func testReadThrowsOnGroupReadableFile() throws {
+        // Python 1.5.0/1.10.0 tightened this from a stderr warning to a hard failure.
         try writeRawCredentialsFile(mode: 0o640)
-        let credentials = try XCTUnwrap(try CredentialsStore.read(profile: "default", environment: environment))
-        XCTAssertEqual(credentials.accessToken, "at-raw")
+        XCTAssertThrowsError(try CredentialsStore.read(profile: "default", environment: environment)) { error in
+            XCTAssertTrue("\(error)".contains("accessible by group or others"), "\(error)")
+            XCTAssertTrue("\(error)".contains("chmod 600"), "\(error)")
+        }
+    }
+
+    func testReadThrowsOnGroupOrOtherWritableFileEvenWhenNotReadable() throws {
+        // The old check never looked at write bits at all.
+        for mode in [0o620, 0o602, 0o660, 0o666, 0o610, 0o601] {
+            try writeRawCredentialsFile(mode: mode)
+            XCTAssertThrowsError(
+                try CredentialsStore.read(profile: "default", environment: environment), "mode \(String(mode, radix: 8))"
+            )
+        }
+    }
+
+    func testStoreRefusesToMergeIntoAnExistingGroupAccessibleFile() throws {
+        try writeRawCredentialsFile(mode: 0o640)
+        XCTAssertThrowsError(try CredentialsStore.store(
+            profile: "default", environment: environment, accessToken: "at-new", expiresAt: nil, refreshToken: nil
+        ))
     }
 
     func testReadSucceedsOnOwnerOnlyFile() throws {

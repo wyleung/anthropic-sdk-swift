@@ -27,6 +27,8 @@ final class CredentialChainTests: XCTestCase {
         var object: [String: Any] = ["authentication": ["type": "user_oauth", "client_id": clientId]]
         if let baseURL { object["base_url"] = baseURL }
         try JSONSerialization.data(withJSONObject: object).write(to: path)
+        // Explicit, not umask-derived: the loader refuses group/other-writable config files.
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: path.path)
     }
 
     // MARK: - step 1 / 2: explicit authProvider / apiKey
