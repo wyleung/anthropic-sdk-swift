@@ -32,6 +32,20 @@ public struct Messages: Sendable {
         return MessageStream(response: response, sse: sse)
     }
 
+    /// Counts the tokens a request would use -- messages, system prompt, tools, images and documents
+    /// included -- without creating a message. `userProfileId` is sent as the
+    /// `anthropic-user-profile-id` header, as on `create`.
+    public func countTokens(
+        _ params: MessageCountTokensParams,
+        userProfileId: String? = nil,
+        options: RequestOptions = RequestOptions()
+    ) async throws -> MessageTokensCount {
+        try await client.transport.send(
+            method: "POST", path: "v1/messages/count_tokens", body: params,
+            options: Self.mergedOptions(userProfileId: userProfileId, base: options)
+        )
+    }
+
     private static func mergedOptions(userProfileId: String?, base options: RequestOptions) -> RequestOptions {
         var headers: [String: String?] = [:]
         if let userProfileId {
