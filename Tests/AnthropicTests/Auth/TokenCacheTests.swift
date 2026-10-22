@@ -47,17 +47,12 @@ final class TokenCacheTests: XCTestCase {
         XCTAssertEqual(secondCallResult.accessToken, "initial")
 
         await refreshStarted.wait()
-        // Let the actor finish the `completeRefresh` hop that follows the provider returning.
-        await Task.yield()
-        await Task.yield()
 
+        // The provider returning is not the refresh landing: `completeRefresh` is a later actor hop.
+        let thirdCallResult = try await tokenServedByCache(cache, waitingFor: "refreshed")
+        XCTAssertEqual(thirdCallResult.accessToken, "refreshed")
         let countAfterBackgroundRefresh = await counter.count
         XCTAssertEqual(countAfterBackgroundRefresh, 1)
-        let thirdCallResult = try await cache.token(provider: { _ in
-            XCTFail("provider should not be called again once the cache holds a fresh token")
-            throw AnthropicError.responseValidation(message: "unexpected", body: nil)
-        })
-        XCTAssertEqual(thirdCallResult.accessToken, "refreshed")
     }
 
     func testAdvisoryWindowDoesNotStartASecondBackgroundRefreshWhileOneIsPending() async throws {
@@ -89,16 +84,11 @@ final class TokenCacheTests: XCTestCase {
         XCTAssertEqual(secondResult.accessToken, "initial")
 
         await releaseRefresh.fire()
-        await Task.yield()
-        await Task.yield()
 
+        let thirdResult = try await tokenServedByCache(cache, waitingFor: "refreshed")
+        XCTAssertEqual(thirdResult.accessToken, "refreshed")
         let finalCount = await counter.count
         XCTAssertEqual(finalCount, 1)
-        let thirdResult = try await cache.token(provider: { _ in
-            XCTFail("provider should not be called again once the cache holds the refreshed token")
-            throw AnthropicError.responseValidation(message: "unexpected", body: nil)
-        })
-        XCTAssertEqual(thirdResult.accessToken, "refreshed")
     }
 
     func testMandatoryWindowBlocksUntilRefreshCompletes() async throws {
@@ -151,6 +141,9 @@ final class TokenCacheTests: XCTestCase {
         // At this point `pendingRefresh` is set but the leader's provider call is blocked on
         // `releaseLeader`, so the waiter is guaranteed to join the in-flight refresh below.
         let waiterTask = Task { try await cache.token(provider: provider) }
+        // Nothing observable says the waiter has joined yet, so give it a best-effort head start.
+        // Either order ends the same way (a late waiter simply becomes the leader itself), so this
+        // can only change which path is exercised, never the outcome.
         await Task.yield()
         await Task.yield()
 
@@ -168,6 +161,36 @@ final class TokenCacheTests: XCTestCase {
         let finalCount = await counter.count
         XCTAssertEqual(finalCount, 2)
     }
+}
+
+/// Polls `cache` until it serves a token whose `accessToken` is `expected`, or `timeout` passes (then
+/// it returns whatever it last served, so the caller's assertion reports the mismatch).
+///
+/// A background refresh finishes on its own `Task`, so no fixed number of `Task.yield()`s guarantees
+/// it has landed; observing the cache removes the guess. Every poll hands the cache a provider that
+/// must never run -- the refresh being awaited is either still pending or already stored -- so a call
+/// to it means a second refresh was wrongly started, which fails the test.
+private func tokenServedByCache(
+    _ cache: TokenCache,
+    waitingFor expected: String,
+    timeout: TimeInterval = 10,
+    file: StaticString = #filePath,
+    line: UInt = #line
+) async throws -> AccessToken {
+    let strayProviderCalls = Counter()
+    let deadline = Date().addingTimeInterval(timeout)
+    var served: AccessToken
+    repeat {
+        served = try await cache.token(provider: { _ in
+            await strayProviderCalls.increment()
+            return AccessToken(accessToken: "stray-provider-call", expiresAt: nil, refreshToken: nil)
+        })
+        if served.accessToken == expected { break }
+        try await Task.sleep(nanoseconds: 5_000_000)
+    } while Date() < deadline
+    let strayCount = await strayProviderCalls.count
+    XCTAssertEqual(strayCount, 0, "a second refresh was started while one was already in flight or stored", file: file, line: line)
+    return served
 }
 
 private actor Counter {
