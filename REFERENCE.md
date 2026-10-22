@@ -11,12 +11,16 @@ This SDK is hand-ported from the official Python and TypeScript SDKs (see [CONTR
 
 ## Checking for drift
 
-From a local clone of each reference repo:
+From a local clone of each reference repo. The clones' `origin` is a personal fork that doesn't track upstream, so **fetch `upstream` and diff against `upstream/main`** — diffing against a local `HEAD` silently reports no drift:
 
 ```sh
-cd anthropic-sdk-python && git log --oneline 4474f31..HEAD -- src/anthropic/types src/anthropic/resources
-cd anthropic-sdk-typescript && git log --oneline bfa9197..HEAD -- src/resources
+cd anthropic-sdk-python && git fetch upstream --tags \
+  && git log --oneline 4474f31..upstream/main -- src/anthropic ':!src/anthropic/lib/bedrock' ':!src/anthropic/lib/vertex' ':!src/anthropic/lib/foundry' ':!src/anthropic/lib/aws' ':!src/anthropic/lib/google_cloud'
+cd anthropic-sdk-typescript && git fetch upstream --tags \
+  && git log --oneline bfa9197..upstream/main -- src
 ```
+
+Scope the paths to the whole source tree, not just `types/` and `resources/`: client behaviour that matters here (the `anthropic-version` constant, retry/backoff, streaming, credentials, tool runners) lives in `_constants.py`/`_base_client.py`/`lib/` (Python) and `client.ts`/`core/`/`lib/`/`tools/` (TypeScript), none of which a resources-only filter sees. The changelog (`git diff <pin> upstream/main -- CHANGELOG.md`) is the fastest way to triage before reading individual commits.
 
 Read through the resulting commits for anything relevant to this port: new endpoints, new/changed fields, new beta headers, renamed or removed types, new discriminated-union variants. Port whatever applies, following the workflow in [CONTRIBUTING.md](CONTRIBUTING.md), then update the pin table above to the new commit/version/date.
 
