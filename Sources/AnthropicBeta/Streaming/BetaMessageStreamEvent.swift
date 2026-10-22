@@ -72,4 +72,7 @@ public enum BetaMessageStreamEvent: Sendable, Equatable {
     case signature(BetaSignatureEvent)
     case inputJSON(BetaInputJSONEvent)
     case compaction(BetaCompactionEvent)
+    /// A raw event the accumulator did not fold into the snapshot, passed through unchanged. See
+    /// GA's `MessageStreamEvent.passthrough`.
+    case passthrough(BetaRawMessageStreamEvent)
 }

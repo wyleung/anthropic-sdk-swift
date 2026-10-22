@@ -3,23 +3,29 @@ import Anthropic
 
 /// The Beta analogue of GA's `MessagesSSE`: translates decoded SSE messages into
 /// `BetaRawMessageStreamEvent`s for the Beta Messages API. Same event vocabulary and same
-/// `ping`/`error`/forward-compatible-drop handling as GA -- duplicated rather than reused since
-/// GA's `MessagesSSE` is `internal` to the `Anthropic` module and decodes GA's own
-/// `RawMessageStreamEvent`.
+/// `ping`/`error`/unrecognized-name handling as GA (unrecognized names become `.unknown`, not
+/// dropped) -- duplicated rather than reused since GA's `MessagesSSE` is `internal` to the
+/// `Anthropic` module and decodes GA's own `RawMessageStreamEvent`.
 enum BetaMessagesSSE {
+    private static let knownEventNames: Set<String> = [
+        "message_start", "message_delta", "message_stop",
+        "content_block_start", "content_block_delta", "content_block_stop",
+    ]
+
     static func translate(_ sse: ServerSentEvent, response: HTTPURLResponse) throws -> BetaRawMessageStreamEvent? {
-        switch sse.event {
-        case "ping":
-            return nil
-        case "error":
+        guard let event = sse.event, event != "ping" else { return nil }
+        if event == "error" {
             let body = try? HTTPTransport.decoder.decode(JSONValue.self, from: Data(sse.data.utf8))
             throw AnthropicError.from(response: response, body: body)
-        case "message_start", "message_delta", "message_stop",
-             "content_block_start", "content_block_delta", "content_block_stop":
-            let data = try injectingType(sse.data, from: sse.event)
+        }
+        guard !sse.data.isEmpty else { return nil }
+        do {
+            let data = try injectingType(sse.data, from: event)
             return try HTTPTransport.decoder.decode(BetaRawMessageStreamEvent.self, from: data)
-        default:
-            return nil
+        } catch where !knownEventNames.contains(event) {
+            // See GA's `MessagesSSE.translate`: an unrecognized name with an unparseable payload
+            // is handed over verbatim rather than failing the stream.
+            return .unknown(type: event, raw: .string(sse.data))
         }
     }
 

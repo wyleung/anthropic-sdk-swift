@@ -21,6 +21,14 @@ public final class MessageStream: Sendable {
                 for try await sseEvent in sse {
                     try Task.checkCancellation()
                     guard let raw = try MessagesSSE.translate(sseEvent, response: response) else { continue }
+                    // Like Python's `__stream__`: anything before `message_start` is yielded as-is,
+                    // not fed to the accumulator (whose own contract is still "begin with message_start").
+                    if accumulator.snapshot == nil {
+                        guard case .messageStart = raw else {
+                            await broadcast.publish(.passthrough(raw))
+                            continue
+                        }
+                    }
                     let snapshot = try accumulator.accumulate(raw)
                     for event in try buildMessageStreamEvents(for: raw, snapshot: snapshot) {
                         await broadcast.publish(event)

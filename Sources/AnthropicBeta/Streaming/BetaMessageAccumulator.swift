@@ -56,7 +56,7 @@ func buildBetaMessageStreamEvents(
         }
         return events
     case .unknown:
-        return []
+        return [.passthrough(event)]
     }
 }
 

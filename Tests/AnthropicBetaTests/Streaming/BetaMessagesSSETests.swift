@@ -13,9 +13,33 @@ final class BetaMessagesSSETests: XCTestCase {
         XCTAssertNil(try BetaMessagesSSE.translate(sse, response: response))
     }
 
-    func testTranslateDropsUnrecognizedEventNames() throws {
-        let sse = ServerSentEvent(event: "agent_message_delta", data: "{}", raw: [])
-        XCTAssertNil(try BetaMessagesSSE.translate(sse, response: response))
+    func testTranslateSurfacesUnrecognizedEventNamesAsUnknownInsteadOfDroppingThem() throws {
+        let sse = ServerSentEvent(event: "agent_message_delta", data: #"{"text":"hi"}"#, raw: [])
+        let event = try BetaMessagesSSE.translate(sse, response: response)
+        guard case .unknown(let type, let raw) = event else {
+            return XCTFail("expected .unknown, got \(String(describing: event))")
+        }
+        XCTAssertEqual(type, "agent_message_delta")
+        XCTAssertEqual(raw["text"]?.stringValue, "hi")
+        XCTAssertEqual(raw["type"]?.stringValue, "agent_message_delta")
+    }
+
+    func testTranslateHandsOverANonJSONPayloadOfAnUnrecognizedEventVerbatimInsteadOfThrowing() throws {
+        let sse = ServerSentEvent(event: "future_event", data: "not json at all", raw: [])
+        XCTAssertEqual(
+            try BetaMessagesSSE.translate(sse, response: response),
+            .unknown(type: "future_event", raw: .string("not json at all"))
+        )
+    }
+
+    func testTranslateStillThrowsOnAMalformedPayloadUnderAKnownEventName() {
+        let sse = ServerSentEvent(event: "message_start", data: "not json at all", raw: [])
+        XCTAssertThrowsError(try BetaMessagesSSE.translate(sse, response: response))
+    }
+
+    func testTranslateSkipsEventsWithNoData() throws {
+        XCTAssertNil(try BetaMessagesSSE.translate(ServerSentEvent(event: "message_stop", data: "", raw: []), response: response))
+        XCTAssertNil(try BetaMessagesSSE.translate(ServerSentEvent(event: "future_event", data: "", raw: []), response: response))
     }
 
     func testTranslateDropsEventsWithNoEventName() throws {

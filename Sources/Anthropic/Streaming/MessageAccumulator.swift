@@ -48,7 +48,7 @@ func buildMessageStreamEvents(for event: RawMessageStreamEvent, snapshot: Messag
         }
         return events
     case .unknown:
-        return []
+        return [.passthrough(event)]
     }
 }
 

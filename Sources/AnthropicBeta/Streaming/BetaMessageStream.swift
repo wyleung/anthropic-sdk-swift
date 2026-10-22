@@ -18,6 +18,13 @@ public final class BetaMessageStream: Sendable {
             do {
                 for try await sseEvent in sse {
                     guard let raw = try BetaMessagesSSE.translate(sseEvent, response: response) else { continue }
+                    // See GA's `MessageStream`: pre-`message_start` events bypass the accumulator.
+                    if accumulator.snapshot == nil {
+                        guard case .messageStart = raw else {
+                            await broadcast.publish(.passthrough(raw))
+                            continue
+                        }
+                    }
                     let snapshot = try accumulator.accumulate(raw)
                     for event in try buildBetaMessageStreamEvents(for: raw, snapshot: snapshot) {
                         await broadcast.publish(event)

@@ -1,24 +1,34 @@
 import Foundation
 
 /// Translates decoded SSE messages into `RawMessageStreamEvent`s for the Messages API. This is
-/// the Messages-specific layer above the generic `SSEDecoder`: it knows about `ping`/`error` and
-/// the 6 Messages event names, and drops everything else (the Managed-Agents event vocabulary,
-/// the deprecated text-completions `completion` event, and any unrecognized name) as
-/// forward-compatible no-ops -- matching both reference SDKs' `_iterSSEMessages`/`__stream__`.
+/// the Messages-specific layer above the generic `SSEDecoder`: `ping`, unnamed events and events
+/// with no data are skipped, `error` throws, and every other named event is decoded -- the 6
+/// Messages event names into their typed cases, anything else into `.unknown(type:raw:)`.
+///
+/// Unrecognized names used to be dropped as forward-compatible no-ops, matching the reference
+/// SDKs' old hard-coded allowlist in `__stream__`/`_iterSSEMessages`; Python 1.16.0 and TypeScript
+/// 0.136.0 now yield them instead, so a new event type is visible to the caller rather than silent.
 enum MessagesSSE {
+    private static let knownEventNames: Set<String> = [
+        "message_start", "message_delta", "message_stop",
+        "content_block_start", "content_block_delta", "content_block_stop",
+    ]
+
     static func translate(_ sse: ServerSentEvent, response: HTTPURLResponse) throws -> RawMessageStreamEvent? {
-        switch sse.event {
-        case "ping":
-            return nil
-        case "error":
+        guard let event = sse.event, event != "ping" else { return nil }
+        if event == "error" {
             let body = try? HTTPTransport.decoder.decode(JSONValue.self, from: Data(sse.data.utf8))
             throw AnthropicError.from(response: response, body: body)
-        case "message_start", "message_delta", "message_stop",
-             "content_block_start", "content_block_delta", "content_block_stop":
-            let data = try injectingType(sse.data, from: sse.event)
+        }
+        guard !sse.data.isEmpty else { return nil }
+        do {
+            let data = try injectingType(sse.data, from: event)
             return try HTTPTransport.decoder.decode(RawMessageStreamEvent.self, from: data)
-        default:
-            return nil
+        } catch where !knownEventNames.contains(event) {
+            // A payload we can't make sense of under a name we don't recognize must not take down
+            // the whole stream (Python would raise here); hand it over verbatim instead. A
+            // malformed event with a *known* name still throws -- that's a real protocol fault.
+            return .unknown(type: event, raw: .string(sse.data))
         }
     }
 

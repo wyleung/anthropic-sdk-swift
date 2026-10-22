@@ -61,4 +61,9 @@ public enum MessageStreamEvent: Sendable, Equatable {
     case thinking(ThinkingEvent)
     case signature(SignatureEvent)
     case inputJSON(InputJSONEvent)
+    /// A raw event the accumulator did not fold into the snapshot, passed through unchanged: either
+    /// a type this port doesn't recognize (`.unknown`), or any event that arrived before
+    /// `message_start`, when there is no snapshot yet to enrich it with. Matches Python/TypeScript,
+    /// which yield such events instead of failing the stream ("Unexpected event order").
+    case passthrough(RawMessageStreamEvent)
 }
