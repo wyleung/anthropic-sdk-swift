@@ -9,6 +9,19 @@ This SDK is hand-ported from the official Python and TypeScript SDKs (see [CONTR
 | [anthropic-sdk-python](https://github.com/anthropics/anthropic-sdk-python) | `4474f31efa48588eff590f04419230791e22419f` | v1.0.0 | 2026-08-28 |
 | [anthropic-sdk-typescript](https://github.com/anthropics/anthropic-sdk-typescript) | `bfa9197f0182084941052be9752c948638421601` | v0.120.0 | 2026-08-28 |
 
+## Sync in progress
+
+Re-synced against upstream on 2026-10-22; the pin above stays put until the whole diff is ported or triaged out. Target: Python `9313f13a5a643ceed10fafba6785eab8e04b6e6e` (v2.1.0), TypeScript `5badc765f17d373405f300ee8e69e7f490b1f172` (v1.1.0).
+
+Decisions: adopt API version `2026-10-21` (a breaking upstream release: `anthropic-version` bump, API keys sent as `Authorization: Bearer`, one credential per client with new env precedence); keep Swift's single `MessageParam` + `Role` rather than upstream's per-role union (same JSON); the Admin/Organization API, Bedrock/Vertex/Foundry/AWS/Google Cloud clients, OpenTelemetry and the CLI stay out of scope.
+
+Order of work, each milestone committed and pushed on its own:
+
+1. **Hardening and client behaviour** — done: credential-file permission checks, long `Retry-After`, no redirects on token requests, empty path ids rejected, unknown and pre-`message_start` stream events passed through, session-runner idle watchdog.
+2. GA surface additions: `speed`/`usage.speed`, GA `diagnostics`, `between_tools` thinking, web-fetch `url_sources` and `content_too_large`, `ModelInfo` lifecycle fields/`line`/`lifecycle` filter and capability additions.
+3. Beta and Managed Agents: User Profiles GA and enforcement, agent `execution_identity`/workflows/auto-mode permissions, session repository errors and event-type filter, tunnel `transport` and create-time token, compaction, inline tool definitions and MCP tool-list pinning, new webhook events.
+4. API version `2026-10-21`: header bump, Bearer API-key auth, new credential precedence (`CredentialsError`/`IdentityTokenFileError` equivalents), `Message`-to-param helper, tool-runner helper features.
+
 ## Checking for drift
 
 From a local clone of each reference repo. The clones' `origin` is a personal fork that doesn't track upstream, so **fetch `upstream` and diff against `upstream/main`** — diffing against a local `HEAD` silently reports no drift:
