@@ -131,7 +131,7 @@ public actor SessionToolRunner {
     private var confirmations: [String: ToolConfirmationVerdict] = [:]
     private var awaitingConfirmation: [String: DispatchedToolUseEvent] = [:]
 
-    private var idleEndTurnAt: TimeInterval?
+    private var idleTurnEndedAt: TimeInterval?
     private var idleHolds = 0
     private var idleArmDeferred = false
 
@@ -304,7 +304,7 @@ public actor SessionToolRunner {
     /// reconnecting after a drop) catches up on anything it missed.
     private func reconcile() async {
         var newlySeen: [String] = []
-        var lastWasEndTurn = false
+        var lastEndedTurn = false
         let unanswered: [DispatchedToolUseEvent]
 
         do {
@@ -325,38 +325,34 @@ public actor SessionToolRunner {
             for sessionEvent in allEvents {
                 switch sessionEvent {
                 case .agentToolUse(let toolUse):
-                    lastWasEndTurn = false
+                    lastEndedTurn = false
                     if !seen.contains(toolUse.id) {
                         seen.insert(toolUse.id)
                         newlySeen.append(toolUse.id)
                         pending.append(.toolUse(toolUse))
                     }
                 case .agentCustomToolUse(let toolUse):
-                    lastWasEndTurn = false
+                    lastEndedTurn = false
                     if !seen.contains(toolUse.id) {
                         seen.insert(toolUse.id)
                         newlySeen.append(toolUse.id)
                         pending.append(.customToolUse(toolUse))
                     }
                 case .userToolResult(let result):
-                    lastWasEndTurn = false
+                    lastEndedTurn = false
                     answered.insert(result.toolUseId)
                 case .userCustomToolResult(let result):
-                    lastWasEndTurn = false
+                    lastEndedTurn = false
                     answered.insert(result.customToolUseId)
                 case .userToolConfirmation(let confirmation):
-                    lastWasEndTurn = false
+                    lastEndedTurn = false
                     if !answered.contains(confirmation.toolUseId) {
                         confirmations[confirmation.toolUseId] = confirmation.result == .allow ? .allow : .deny
                     }
                 case .sessionStatusIdle(let idle):
-                    if case .endTurn = idle.stopReason {
-                        lastWasEndTurn = true
-                    } else {
-                        lastWasEndTurn = false
-                    }
+                    lastEndedTurn = Self.endsTurn(idle.stopReason)
                 default:
-                    lastWasEndTurn = false
+                    lastEndedTurn = false
                 }
             }
             unanswered = pending.filter { !answered.contains($0.id) }
@@ -378,7 +374,7 @@ public actor SessionToolRunner {
             guard let event = awaitingConfirmation[id], let verdict = confirmations[id] else { continue }
             applyVerdict(event, verdict: verdict)
         }
-        if lastWasEndTurn {
+        if lastEndedTurn {
             idleArm()
         }
     }
@@ -504,8 +500,8 @@ public actor SessionToolRunner {
 
     // MARK: - Idle clock
 
-    /// Ported from Python's `_IdleClock`. Invariant: "armed" means `idleEndTurnAt != nil`;
-    /// "deferred-armed" means `idleEndTurnAt == nil && idleArmDeferred && idleHolds > 0`. A hold taken
+    /// Ported from Python's `_IdleClock`. Invariant: "armed" means `idleTurnEndedAt != nil`;
+    /// "deferred-armed" means `idleTurnEndedAt == nil && idleArmDeferred && idleHolds > 0`. A hold taken
     /// while armed converts the running countdown into a deferred one instead of just clearing it, so
     /// the deferred arm is re-applied (with a fresh timestamp) the moment the last hold releases.
     private func idleArm() {
@@ -513,18 +509,18 @@ public actor SessionToolRunner {
             idleArmDeferred = true
             return
         }
-        idleEndTurnAt = now()
+        idleTurnEndedAt = now()
     }
 
     private func idleDisarm() {
         idleArmDeferred = false
-        idleEndTurnAt = nil
+        idleTurnEndedAt = nil
     }
 
     private func idleHold() {
         idleHolds += 1
-        if idleEndTurnAt != nil {
-            idleEndTurnAt = nil
+        if idleTurnEndedAt != nil {
+            idleTurnEndedAt = nil
             idleArmDeferred = true
         }
     }
@@ -537,8 +533,18 @@ public actor SessionToolRunner {
         }
     }
 
+    /// Whether an idle with this stop reason ends the turn, and so starts the `maxIdle` countdown.
+    /// Only `requires_action` leaves the turn open (the session resumes once a client resolves the
+    /// events it names); every other reason ends it -- including one newer than this SDK's types,
+    /// which decodes to `.unknown`. Python 1.10.0 / TypeScript 0.130.0 widened this from `end_turn`
+    /// alone, so a session that went idle on `retries_exhausted` or `budget_reached` never timed out.
+    static func endsTurn(_ stopReason: BetaManagedAgentsSessionStopReason) -> Bool {
+        if case .requiresAction = stopReason { return false }
+        return true
+    }
+
     private func noteIdleEvent(_ event: BetaManagedAgentsStreamSessionEvents) {
-        if case .sessionStatusIdle(let idle) = event, case .endTurn = idle.stopReason {
+        if case .sessionStatusIdle(let idle) = event, Self.endsTurn(idle.stopReason) {
             idleArm()
         } else {
             idleDisarm()
@@ -549,7 +555,7 @@ public actor SessionToolRunner {
     private func idleWatchdog() async {
         guard let maxIdle else { return }
         while !stopped {
-            if let armedAt = idleEndTurnAt {
+            if let armedAt = idleTurnEndedAt {
                 let remaining = maxIdle - (now() - armedAt)
                 if remaining <= 0 {
                     stop()

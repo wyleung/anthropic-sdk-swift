@@ -113,11 +113,13 @@ final class BetaSessionToolRunnerTests: XCTestCase {
         return (lines.joined(separator: "\n") + "\n").data(using: .utf8)!
     }
 
-    private func makeRunner(_ router: SessionRouter, tools: [AnyAnthropicTool] = []) -> SessionToolRunner {
+    private func makeRunner(
+        _ router: SessionRouter, tools: [AnyAnthropicTool] = [], maxIdle: TimeInterval? = nil
+    ) -> SessionToolRunner {
         MockURLProtocol.responder = { try router.respond(to: $0) }
         let client = AnthropicClient(apiKey: "test-key", urlSession: MockURLProtocol.makeSession())
         self.client = client
-        return client.beta.sessions.events.toolRunner(sessionId: "sess_1", tools: tools, maxIdle: nil)
+        return client.beta.sessions.events.toolRunner(sessionId: "sess_1", tools: tools, maxIdle: maxIdle)
     }
 
     private func collectCalls(_ runner: SessionToolRunner) async throws -> [DispatchedToolCall] {
@@ -453,5 +455,58 @@ final class BetaSessionToolRunnerTests: XCTestCase {
         }
 
         XCTAssertTrue(finishedInTime, "run() should terminate promptly once the consumer walks away")
+    }
+
+    // MARK: - idle watchdog
+
+    func testEveryStopReasonExceptRequiresActionEndsTheTurn() {
+        // Python 1.10.0 / TypeScript 0.130.0: only `requires_action` leaves the turn open; the
+        // runner used to arm its idle countdown on `end_turn` alone.
+        XCTAssertTrue(SessionToolRunner.endsTurn(.endTurn(BetaManagedAgentsSessionEndTurn())))
+        XCTAssertTrue(SessionToolRunner.endsTurn(.retriesExhausted(BetaManagedAgentsSessionRetriesExhausted())))
+        XCTAssertTrue(SessionToolRunner.endsTurn(.budgetReached(BetaManagedAgentsSessionBudgetReached())))
+        XCTAssertFalse(SessionToolRunner.endsTurn(.requiresAction(BetaManagedAgentsSessionRequiresAction(eventIds: ["evt_1"]))))
+    }
+
+    func testAStopReasonNewerThanTheSDKStillEndsTheTurn() {
+        XCTAssertTrue(SessionToolRunner.endsTurn(.unknown(type: "some_future_reason", raw: .object([:]))))
+    }
+
+    func testSessionIdlingOnRetriesExhaustedIsStoppedByTheIdleWatchdog() async throws {
+        // No `session.status_terminated`: with `maxIdle: nil` this stream would reconnect forever,
+        // so `run()` can only finish if the watchdog arms on the idle event and then stops it.
+        let router = SessionRouter(
+            listFixture: Self.emptyList,
+            streamFixture: Self.sse([
+                (
+                    event: "session.status_idle",
+                    data: #"{"type":"session.status_idle","id":"evt_1","processed_at":"2026-01-01T00:00:00Z","stop_reason":{"type":"retries_exhausted"}}"#
+                ),
+            ])
+        )
+        let runner = makeRunner(router, maxIdle: 0.05)
+
+        let consumer = Task {
+            for try await _ in await runner.run() {}
+        }
+        let finishedInTime = await withTaskGroup(of: Bool.self) { group in
+            group.addTask {
+                _ = try? await consumer.value
+                return true
+            }
+            group.addTask {
+                // The watchdog polls once a second while disarmed, so allow comfortably more than that.
+                try? await Task.sleep(nanoseconds: 6_000_000_000)
+                // A task group only exits once *every* child has finished, and the sibling above is
+                // awaiting a runner that -- if the watchdog is broken -- never stops on its own.
+                // Cancelling the consumer here lets the failure path fail instead of hanging the suite.
+                consumer.cancel()
+                return false
+            }
+            let first = await group.next()!
+            group.cancelAll()
+            return first
+        }
+        XCTAssertTrue(finishedInTime, "a retries_exhausted idle ends the turn, so the idle watchdog must stop the runner")
     }
 }

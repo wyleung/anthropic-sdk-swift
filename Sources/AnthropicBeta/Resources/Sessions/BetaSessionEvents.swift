@@ -89,8 +89,8 @@ public struct BetaSessionEvents: Sendable {
     /// Builds a `SessionToolRunner` that watches this session's events, dispatches
     /// `agent.tool_use`/`agent.custom_tool_use` events to `tools`, and posts results back --
     /// mirroring `BetaMessages.toolRunner`'s factory shape. `maxIdle` stops the runner after this
-    /// many seconds of session inactivity following an `end_turn` idle event (`nil` disables the
-    /// idle watchdog entirely). `environmentKey` scopes every request the runner makes to a
+    /// many seconds of session inactivity following any idle event that ends the turn -- every stop
+    /// reason except `requires_action` (`nil` disables the idle watchdog entirely). `environmentKey` scopes every request the runner makes to a
     /// `self_hosted` environment's own bearer token instead of the client's API key.
     public func toolRunner(
         sessionId: String,
