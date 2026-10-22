@@ -1,10 +1,10 @@
 import Anthropic
 
-/// The decoded, signature-verified result of `AnthropicWebhooks.unwrap`/`client.beta.webhooks.unwrap`.
-/// Mirrors `types/beta/unwrap_webhook_event.py` -- the real Python source type name; `api.md`'s
-/// `BetaWebhookEvent` doesn't exist in source (TypeScript names both, Python only this one), the
-/// same class of doc-vs-source naming gap as `SkillSource` in Phase 6.
-public struct UnwrapWebhookEvent: Codable, Sendable, Equatable {
+/// A webhook event envelope: what `AnthropicWebhooks.unwrap` returns once the signature checks out, and what
+/// `parseUnverified` returns without checking it. Ported from `types/beta/beta_webhook_event.py`;
+/// `unwrap_webhook_event.py` is now just an alias of it (`UnwrapWebhookEvent`, below), which is why this
+/// type was once named only `UnwrapWebhookEvent`.
+public struct BetaWebhookEvent: Codable, Sendable, Equatable {
     public let id: String
     public let createdAt: String
     public let data: BetaWebhookEventData
@@ -17,3 +17,6 @@ public struct UnwrapWebhookEvent: Codable, Sendable, Equatable {
         self.type = type
     }
 }
+
+/// What `unwrap` returns -- upstream's alias for `BetaWebhookEvent`.
+public typealias UnwrapWebhookEvent = BetaWebhookEvent

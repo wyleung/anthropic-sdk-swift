@@ -31,12 +31,19 @@ public enum AnthropicWebhooks {
     ///     system clock. Overridable so tests can verify fixed, non-live timestamps deterministically.
     /// - Throws: `AnthropicError.webhookValidation` if headers are missing, the timestamp is
     ///   malformed or outside the tolerance window, or no candidate signature matches.
+    /// Parses a webhook payload into an event **without verifying its signature**. Prefer `unwrap` unless you
+    /// have already verified the signature yourself -- anyone who can reach your endpoint can send a payload
+    /// this accepts. Ported from `Webhooks.parse_unverified`.
+    public static func parseUnverified(payload: String) throws -> BetaWebhookEvent {
+        try HTTPTransport.decoder.decode(BetaWebhookEvent.self, from: Data(payload.utf8))
+    }
+
     public static func unwrap(
         payload: String,
         headers: [String: String],
         key: String,
         clock: () -> Date = { Date() }
-    ) throws -> UnwrapWebhookEvent {
+    ) throws -> BetaWebhookEvent {
         let normalizedHeaders = headers.reduce(into: [String: String]()) { result, pair in
             result[pair.key.lowercased()] = pair.value
         }
@@ -81,7 +88,7 @@ public enum AnthropicWebhooks {
             throw AnthropicError.webhookValidation(message: "No matching signature found")
         }
 
-        return try HTTPTransport.decoder.decode(UnwrapWebhookEvent.self, from: Data(payload.utf8))
+        return try HTTPTransport.decoder.decode(BetaWebhookEvent.self, from: Data(payload.utf8))
     }
 
     private static func decodeSecret(_ key: String) throws -> Data {

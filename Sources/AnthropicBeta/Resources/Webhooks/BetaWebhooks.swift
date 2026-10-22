@@ -7,12 +7,18 @@ import Foundation
 /// callers already used to the reference SDKs' shape don't have to reach for a bare static function.
 public struct BetaWebhooks: Sendable {
     /// Forwards to `AnthropicWebhooks.unwrap` -- see that function for the full contract.
+    /// Parses a webhook payload **without verifying its signature**; prefer `unwrap`. See
+    /// `AnthropicWebhooks.parseUnverified`.
+    public func parseUnverified(payload: String) throws -> BetaWebhookEvent {
+        try AnthropicWebhooks.parseUnverified(payload: payload)
+    }
+
     public func unwrap(
         payload: String,
         headers: [String: String],
         key: String,
         clock: () -> Date = { Date() }
-    ) throws -> UnwrapWebhookEvent {
+    ) throws -> BetaWebhookEvent {
         try AnthropicWebhooks.unwrap(payload: payload, headers: headers, key: key, clock: clock)
     }
 }

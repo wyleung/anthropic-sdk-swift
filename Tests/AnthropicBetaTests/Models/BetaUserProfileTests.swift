@@ -3,7 +3,7 @@ import XCTest
 @testable import AnthropicBeta
 
 final class BetaUserProfileTests: XCTestCase {
-    func testDecodesNewerRelationshipBearingProfileWithMixedTrustGrants() throws {
+    func testDecodesProfileWithMixedTrustGrantsAndExternalOnboardingFields() throws {
         let fixture = """
         {
             "id": "uprof_01ABC",
@@ -15,22 +15,23 @@ final class BetaUserProfileTests: XCTestCase {
             },
             "type": "user_profile",
             "updated_at": "2026-01-16T00:00:00Z",
-            "access_type": null,
+            "access_type": "application",
             "external_id": "ext_42",
-            "name": "Ada Lovelace",
-            "relationship": "external"
+            "external_user_onboarded_at": "2026-01-01T00:00:00Z",
+            "name": "Ada Lovelace"
         }
         """.data(using: .utf8)!
         let profile = try HTTPTransport.decoder.decode(BetaUserProfile.self, from: fixture)
         XCTAssertEqual(profile.id, "uprof_01ABC")
-        XCTAssertNil(profile.accessType)
-        XCTAssertEqual(profile.relationship, .external)
+        XCTAssertEqual(profile.accessType, .application)
+        XCTAssertEqual(profile.externalUserOnboardedAt, "2026-01-01T00:00:00Z")
+        XCTAssertNil(profile.externalUserDetails, "only present when no legacy beta header is sent")
         XCTAssertEqual(profile.trustGrants["device_binding"]?.status, .active)
         XCTAssertEqual(profile.trustGrants["payment_verification"]?.status, .pending)
         XCTAssertNil(profile.trustGrants["nonexistent_grant"])
     }
 
-    func testDecodesOlderAccessTypeOnlyProfileWithNoTrustGrants() throws {
+    func testDecodesPassthroughProfileWithNoTrustGrants() throws {
         let fixture = """
         {
             "id": "uprof_01DEF",
@@ -41,14 +42,13 @@ final class BetaUserProfileTests: XCTestCase {
             "updated_at": "2026-01-15T00:00:00Z",
             "access_type": "passthrough",
             "external_id": null,
-            "name": null,
-            "relationship": null
+            "name": null
         }
         """.data(using: .utf8)!
         let profile = try HTTPTransport.decoder.decode(BetaUserProfile.self, from: fixture)
         XCTAssertEqual(profile.accessType, .passthrough)
-        XCTAssertNil(profile.relationship)
         XCTAssertTrue(profile.trustGrants.isEmpty)
+        XCTAssertNil(profile.externalUserOnboardedAt)
     }
 
     func testTrustGrantStatusUnknownFallback() throws {
@@ -58,16 +58,20 @@ final class BetaUserProfileTests: XCTestCase {
         XCTAssertEqual(decoded, .unknown("revoked"))
     }
 
-    func testAccessTypeAndRelationshipUnknownFallback() throws {
+    func testAccessTypeUnknownFallback() throws {
         let accessType = try HTTPTransport.decoder.decode(
             BetaUserProfileAccessType.self, from: "\"delegated\"".data(using: .utf8)!
         )
         XCTAssertEqual(accessType, .unknown("delegated"))
+    }
 
-        let relationship = try HTTPTransport.decoder.decode(
-            BetaUserProfileRelationship.self, from: "\"partner\"".data(using: .utf8)!
-        )
-        XCTAssertEqual(relationship, .unknown("partner"))
+    func testAProfileStillCarryingTheRetiredRelationshipFieldDecodesAndIgnoresIt() throws {
+        // `relationship` was replaced by `access_type`; a payload that still includes it must not fail.
+        let profile = try HTTPTransport.decoder.decode(BetaUserProfile.self, from: Data("""
+        {"id": "u", "created_at": "t", "metadata": {}, "trust_grants": {}, "type": "user_profile",
+         "updated_at": "t", "relationship": "external"}
+        """.utf8))
+        XCTAssertEqual(profile.id, "u")
     }
 
     func testEnrollmentURLDecodes() throws {
@@ -91,15 +95,16 @@ final class BetaUserProfileTests: XCTestCase {
 
     func testCreateParamsEncodesProvidedFields() throws {
         let params = BetaUserProfileCreateParams(
-            accessType: .application, externalId: "ext_1", metadata: ["k": "v"], name: "Grace Hopper",
-            relationship: .`internal`
+            accessType: .application, externalId: "ext_1", externalUserOnboardedAt: "2026-01-01T00:00:00Z",
+            metadata: ["k": "v"], name: "Grace Hopper"
         )
         let data = try HTTPTransport.encoder.encode(params)
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
         XCTAssertEqual(json["access_type"] as? String, "application")
         XCTAssertEqual(json["external_id"] as? String, "ext_1")
         XCTAssertEqual(json["name"] as? String, "Grace Hopper")
-        XCTAssertEqual(json["relationship"] as? String, "internal")
+        XCTAssertEqual(json["external_user_onboarded_at"] as? String, "2026-01-01T00:00:00Z")
+        XCTAssertNil(json["relationship"], "relationship is gone from the params")
     }
 
     func testUpdateParamsMetadataPatchEncodesNullForClearedKeyAndOmitsAbsentField() throws {

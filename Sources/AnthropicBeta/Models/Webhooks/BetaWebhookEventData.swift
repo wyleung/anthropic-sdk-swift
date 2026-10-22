@@ -1,7 +1,7 @@
 import Anthropic
 
 /// The payload of an unwrapped webhook event, discriminated on `type`. Ported from
-/// `types/beta/beta_webhook_event_data.py` -- a 44-member `Union` covering every resource that can
+/// `types/beta/beta_webhook_event_data.py` -- a 46-member `Union` covering every resource that can
 /// fire a webhook (Agents, Deployments, DeploymentRuns, Environments, MemoryStores, Sessions
 /// (lifecycle/status/thread/outcome), Vaults, VaultCredentials). Every variant shares one of two
 /// uniform shapes: the base `{id, organizationId, type, workspaceId}`, or that shape plus exactly
@@ -53,6 +53,8 @@ public enum BetaWebhookEventData: Sendable, Equatable {
     case vaultCredentialArchived(BetaWebhookVaultCredentialArchivedEventData)
     case vaultCredentialDeleted(BetaWebhookVaultCredentialDeletedEventData)
     case vaultCredentialRefreshFailed(BetaWebhookVaultCredentialRefreshFailedEventData)
+    case userProfileEnforcementActionOpened(BetaWebhookUserProfileEnforcementActionOpenedEventData)
+    case userProfileEnforcementActionResolved(BetaWebhookUserProfileEnforcementActionResolvedEventData)
     case unknown(type: String, raw: JSONValue)
 }
 
@@ -141,6 +143,12 @@ extension BetaWebhookEventData: Codable {
         case "vault_credential.refresh_failed":
             self = .vaultCredentialRefreshFailed(
                 try BetaWebhookVaultCredentialRefreshFailedEventData(from: decoder))
+        case "user_profile.enforcement_action_opened":
+            self = .userProfileEnforcementActionOpened(
+                try BetaWebhookUserProfileEnforcementActionOpenedEventData(from: decoder))
+        case "user_profile.enforcement_action_resolved":
+            self = .userProfileEnforcementActionResolved(
+                try BetaWebhookUserProfileEnforcementActionResolvedEventData(from: decoder))
         default: self = .unknown(type: type, raw: try JSONValue(from: decoder))
         }
     }
@@ -191,6 +199,8 @@ extension BetaWebhookEventData: Codable {
         case .vaultCredentialArchived(let value): try value.encode(to: encoder)
         case .vaultCredentialDeleted(let value): try value.encode(to: encoder)
         case .vaultCredentialRefreshFailed(let value): try value.encode(to: encoder)
+        case .userProfileEnforcementActionOpened(let value): try value.encode(to: encoder)
+        case .userProfileEnforcementActionResolved(let value): try value.encode(to: encoder)
         case .unknown(_, let raw): try raw.encode(to: encoder)
         }
     }

@@ -1,12 +1,9 @@
-/// A `user_profile` object, representing the entity (end-user, resold-to company, or the
-/// platform's own usage) an API key's traffic is attributed to. Mirrors
-/// `types/beta/beta_user_profile.py`.
+/// A `user_profile` object, representing the entity (end-user, resold-to company, or the platform's own
+/// usage) an API key's traffic is attributed to. Mirrors `types/beta/beta_user_profile.py`.
 ///
-/// `accessType` and `relationship` describe overlapping concepts under two different beta headers
-/// -- `accessType` under the older `user-profiles-2026-03-24`, `relationship` under the newer
-/// `user-profiles-2026-08-18` (see `BetaUserProfileAccessType`'s doc comment) -- and can both be
-/// present on the same profile; this port doesn't build separate code paths for the two headers,
-/// just exposes both optional fields as-is.
+/// This is the *legacy-header* shape (the namespace sends `user-profiles-2026-08-18`): it carries
+/// `trustGrants` and the top-level `externalId`/`externalUserOnboardedAt`. The richer current model --
+/// enforcement status and actions, programs -- is `UserProfile`, served by `client.userProfiles`.
 public struct BetaUserProfile: Codable, Sendable, Equatable {
     public let id: String
     public let createdAt: String
@@ -16,8 +13,11 @@ public struct BetaUserProfile: Codable, Sendable, Equatable {
     public let updatedAt: String
     public let accessType: BetaUserProfileAccessType?
     public let externalId: String?
+    /// Present only when the request sends no legacy `user-profiles-*` beta header.
+    public let externalUserDetails: BetaUserProfileExternalUserDetails?
+    /// When the entity opened its account with the platform (RFC 3339); a legacy-header field.
+    public let externalUserOnboardedAt: String?
     public let name: String?
-    public let relationship: BetaUserProfileRelationship?
 
     public init(
         id: String,
@@ -28,8 +28,9 @@ public struct BetaUserProfile: Codable, Sendable, Equatable {
         updatedAt: String,
         accessType: BetaUserProfileAccessType? = nil,
         externalId: String? = nil,
-        name: String? = nil,
-        relationship: BetaUserProfileRelationship? = nil
+        externalUserDetails: BetaUserProfileExternalUserDetails? = nil,
+        externalUserOnboardedAt: String? = nil,
+        name: String? = nil
     ) {
         self.id = id
         self.createdAt = createdAt
@@ -39,7 +40,8 @@ public struct BetaUserProfile: Codable, Sendable, Equatable {
         self.updatedAt = updatedAt
         self.accessType = accessType
         self.externalId = externalId
+        self.externalUserDetails = externalUserDetails
+        self.externalUserOnboardedAt = externalUserOnboardedAt
         self.name = name
-        self.relationship = relationship
     }
 }

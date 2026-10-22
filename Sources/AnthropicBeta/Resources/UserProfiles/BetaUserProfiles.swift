@@ -58,9 +58,11 @@ public struct BetaUserProfiles: Sendable {
     /// List user profiles, most recently created first. `order` is a flat `String?` (`"asc"` /
     /// `"desc"`), matching the codebase-wide rule that query-string filters stay flat even where a
     /// dedicated response enum exists for a similarly-named field.
+    /// `orderBy` is `"created_at"` (the default) or `"name"`.
     public func list(
         limit: Int? = nil,
         order: String? = nil,
+        orderBy: String? = nil,
         page: String? = nil,
         betas: [String] = [],
         options: RequestOptions = RequestOptions()
@@ -71,6 +73,7 @@ public struct BetaUserProfiles: Sendable {
                 [
                     "limit": limit.map(String.init),
                     "order": order,
+                    "order_by": orderBy,
                     "page": page,
                 ]
             ) { _, new in new },
@@ -80,6 +83,20 @@ public struct BetaUserProfiles: Sendable {
 
     /// Create an enrollment URL for a user profile, to send to the end user. Valid until the
     /// returned `expiresAt`.
+    public func delete(
+        _ userProfileId: String,
+        betas: [String] = [],
+        options: RequestOptions = RequestOptions()
+    ) async throws -> BetaDeletedUserProfile {
+        try await client.transport.delete(
+            path: "v1/user_profiles/\(userProfileId.asPathComponent)",
+            query: betaQuery,
+            options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
+        )
+    }
+
+    public var actionURLs: BetaUserProfileActionURLs { BetaUserProfileActionURLs(client: client) }
+
     public func createEnrollmentUrl(
         _ userProfileId: String,
         betas: [String] = [],
@@ -89,6 +106,29 @@ public struct BetaUserProfiles: Sendable {
             path: "v1/user_profiles/\(userProfileId.asPathComponent)/enrollment_url",
             query: betaQuery,
             options: betaRequestOptions(betas: betas, requiredBeta: Self.requiredBeta, base: options)
+        )
+    }
+}
+
+/// Exposed as `client.beta.userProfiles.actionURLs`.
+public struct BetaUserProfileActionURLs: Sendable {
+    unowned let client: AnthropicClient
+
+    /// Creates a one-time URL for an action the end user must take; today the only action is enrolling.
+    public func create(
+        _ userProfileId: String,
+        action: BetaUserProfileEnrollEndUserActionParam = BetaUserProfileEnrollEndUserActionParam(),
+        betas: [String] = [],
+        options: RequestOptions = RequestOptions()
+    ) async throws -> BetaUserProfileActionURL {
+        try await client.transport.send(
+            method: "POST",
+            path: "v1/user_profiles/\(userProfileId.asPathComponent)/action_urls",
+            query: betaQuery,
+            body: UserProfileActionURLCreateParams(action: action),
+            options: betaRequestOptions(
+                betas: betas, requiredBeta: BetaUserProfiles.requiredBeta, base: options
+            )
         )
     }
 }
