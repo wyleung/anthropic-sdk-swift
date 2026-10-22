@@ -18,7 +18,9 @@ Decisions: adopt API version `2026-10-21` (a breaking upstream release: `anthrop
 Order of work, each milestone committed and pushed on its own:
 
 1. **Hardening and client behaviour** — done: credential-file permission checks, long `Retry-After`, no redirects on token requests, empty path ids rejected, unknown and pre-`message_start` stream events passed through, session-runner idle watchdog.
-2. GA surface additions: `speed`/`usage.speed`, GA `diagnostics`, `between_tools` thinking, web-fetch `url_sources` and `content_too_large`, `ModelInfo` lifecycle fields/`line`/`lifecycle` filter and capability additions.
+2. **GA surface additions** — done: `speed`/`usage.speed`, cache `diagnostics`, `between_tools` thinking, web-fetch `url_sources`, `ModelInfo` lifecycle/line/schedule fields, capability additions, the `lifecycle` list filter, `RequestOptions.workspaceId`, and `allowed_callers` removed from the computer/browser toolsets. (`content_too_large` needed no change — the error code is a plain `String`.) Still open from this milestone: Beta's `diagnostics` is a raw `JSONValue` and should become the typed `Diagnostics` in milestone 3.
+
+   **Pre-existing gap, not drift:** `messages.count_tokens` (GA and Beta) exists upstream at the pin and before it, but has never been implemented in Swift. Upstream's new `speed` param on it has nothing to attach to until it is.
 3. Beta and Managed Agents: User Profiles GA and enforcement, agent `execution_identity`/workflows/auto-mode permissions, session repository errors and event-type filter, tunnel `transport` and create-time token, compaction, inline tool definitions and MCP tool-list pinning, new webhook events.
 4. API version `2026-10-21`: header bump, Bearer API-key auth, new credential precedence (`CredentialsError`/`IdentityTokenFileError` equivalents), `Message`-to-param helper, tool-runner helper features.
 
