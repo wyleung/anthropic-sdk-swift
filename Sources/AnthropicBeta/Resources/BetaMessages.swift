@@ -35,6 +35,26 @@ public struct BetaMessages: Sendable {
         return BetaMessageStream(response: response, sse: sse)
     }
 
+    /// Counts the tokens a request would use without creating a message. The endpoint always requires
+    /// the `token-counting-2024-11-01` beta flag, which is appended to `betas` for you (and not
+    /// duplicated if you pass it).
+    public func countTokens(
+        _ params: BetaMessageCountTokensParams,
+        betas: [String] = [],
+        userProfileId: String? = nil,
+        options: RequestOptions = RequestOptions()
+    ) async throws -> BetaMessageTokensCount {
+        try await client.transport.send(
+            method: "POST",
+            path: "v1/messages/count_tokens",
+            query: betaQuery,
+            body: params,
+            options: betaRequestOptions(
+                betas: betas, requiredBeta: "token-counting-2024-11-01", userProfileId: userProfileId, base: options
+            )
+        )
+    }
+
     /// Convenience entry point mirroring the reference SDKs' `client.beta.messages.tool_runner(...)`
     /// -- unlike GA, which has no analogous `messages.toolRunner(...)` and expects callers to
     /// construct `ToolRunner(...)` directly, this is added for Beta since the underlying product
