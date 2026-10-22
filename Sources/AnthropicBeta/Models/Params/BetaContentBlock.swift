@@ -1,9 +1,9 @@
 import Anthropic
 
-/// Ported from `types/beta/beta_content_block.py`'s 17-case discriminated union. Twelve members are
+/// Ported from `types/beta/beta_content_block.py`'s 18-case discriminated union. Twelve members are
 /// confirmed field-identical to their GA `ContentBlock` counterparts and reuse GA's leaf structs
-/// directly; the remaining five (`compaction`, `fallback`, `mcp_tool_use`, `mcp_tool_result`,
-/// `advisor_tool_result`) have no GA equivalent at all and get dedicated Beta-only payload types.
+/// directly; the remaining six (`compaction`, `fallback`, `mcp_tool_use`, `mcp_tool_result`,
+/// `mcp_tool_listing`, `advisor_tool_result`) have no GA equivalent at all and get dedicated Beta-only payload types.
 /// This supersedes slice 1's `BetaContentBlock = ContentBlock` typealias, which relied on GA's
 /// `.unknown` fallback to absorb those five kinds as raw JSON -- now they decode typed.
 public enum BetaContentBlock: Sendable, Equatable {
@@ -21,6 +21,7 @@ public enum BetaContentBlock: Sendable, Equatable {
     case toolSearchToolResult(ToolSearchToolResultBlock)
     case mcpToolUse(BetaMCPToolUseBlock)
     case mcpToolResult(BetaMCPToolResultBlock)
+    case mcpToolListing(BetaMCPToolListingBlock)
     case containerUpload(ContainerUploadBlock)
     case compaction(BetaCompactionBlock)
     case fallback(BetaFallbackBlock)
@@ -65,6 +66,8 @@ extension BetaContentBlock: Codable {
             self = .mcpToolUse(try BetaMCPToolUseBlock(from: decoder))
         case "mcp_tool_result":
             self = .mcpToolResult(try BetaMCPToolResultBlock(from: decoder))
+        case "mcp_tool_listing":
+            self = .mcpToolListing(try BetaMCPToolListingBlock(from: decoder))
         case "container_upload":
             self = .containerUpload(try ContainerUploadBlock(from: decoder))
         case "compaction":
@@ -92,6 +95,7 @@ extension BetaContentBlock: Codable {
         case .toolSearchToolResult(let block): try block.encode(to: encoder)
         case .mcpToolUse(let block): try block.encode(to: encoder)
         case .mcpToolResult(let block): try block.encode(to: encoder)
+        case .mcpToolListing(let block): try block.encode(to: encoder)
         case .containerUpload(let block): try block.encode(to: encoder)
         case .compaction(let block): try block.encode(to: encoder)
         case .fallback(let block): try block.encode(to: encoder)

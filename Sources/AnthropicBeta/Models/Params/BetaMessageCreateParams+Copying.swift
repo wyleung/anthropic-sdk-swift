@@ -16,6 +16,7 @@ extension BetaMessageCreateParams {
             maxTokens: maxTokens,
             messages: messages ?? self.messages,
             cacheControl: cacheControl,
+            compaction: compaction,
             container: container ?? self.container,
             contextManagement: contextManagement,
             diagnostics: diagnostics,

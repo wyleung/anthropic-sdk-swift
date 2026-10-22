@@ -20,10 +20,12 @@ public struct BetaRawMessageDeltaEvent: Codable, Sendable, Equatable {
     public let type = "message_delta"
     public let contextManagement: JSONValue?
     public let delta: Delta
+    /// Present only after a server-side model fallback mid-stream; replaces `message_start`'s value.
+    public let inputTransformations: [BetaInputTransformation]?
     public let usage: BetaMessageDeltaUsage
 
     private enum CodingKeys: String, CodingKey {
-        case type, contextManagement, delta, usage
+        case type, contextManagement, delta, inputTransformations, usage
     }
 }
 

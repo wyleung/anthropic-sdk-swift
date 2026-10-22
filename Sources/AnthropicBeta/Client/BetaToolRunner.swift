@@ -145,22 +145,24 @@ public final class BetaToolRunner {
     }
 
     /// The set of tool names dispatchable right now: every locally-registered tool, with any
-    /// `tool_removal`/`tool_addition` system-message block already in the conversation folded in, in
-    /// order. Evaluated against `params.messages` *before* the current turn's new messages are
-    /// appended, since those blocks only ever describe a change taking effect from that point in the
-    /// conversation onward.
+    /// `tool_removal`/`tool_addition` block already in the conversation folded in, in order. Those
+    /// arrive in `system` messages, and in the `toolChanges` of a `compaction` block in an `assistant`
+    /// message -- which stands in for the system messages of the turns it summarized, so ignoring it
+    /// would forget every tool change made before the compaction. Evaluated against `params.messages`
+    /// *before* the current turn's new messages are appended, since those blocks only ever describe a
+    /// change taking effect from that point in the conversation onward.
     private func availableToolNames() -> Set<String> {
         var available = Set(toolsByName.keys)
-        for message in params.messages where message.role == .system {
+        for message in params.messages {
             for block in message.content {
-                switch block {
-                case .toolRemoval(let removal):
-                    if let name = Self.referencedToolName(removal.tool) {
-                        available.remove(name)
-                    }
-                case .toolAddition(let addition):
-                    if let name = Self.referencedToolName(addition.tool) {
-                        available.insert(name)
+                switch (message.role, block) {
+                case (.system, .toolRemoval(let removal)):
+                    if let name = Self.referencedToolName(removal.tool) { available.remove(name) }
+                case (.system, .toolAddition(let addition)):
+                    if let name = Self.addedToolName(addition.tool) { available.insert(name) }
+                case (.assistant, .compaction(let compaction)):
+                    for change in compaction.toolChanges ?? [] {
+                        Self.apply(change, to: &available)
                     }
                 default:
                     continue
@@ -177,6 +179,44 @@ public final class BetaToolRunner {
         switch reference {
         case .tool(let toolReference): return toolReference.name
         case .mcpTool, .mcpToolset: return nil
+        }
+    }
+
+    /// An addition names a runnable tool either by reference or, for inline tools, by the `name` its
+    /// full definition carries. Not every definition has one (an `mcp_toolset` doesn't), and those are
+    /// never locally runnable.
+    private static func addedToolName(_ target: BetaToolAdditionParam) -> String? {
+        switch target {
+        case .reference(let reference): return referencedToolName(reference)
+        case .definition(let definition): return definitionName(definition.definition)
+        }
+    }
+
+    private static func definitionName(_ definition: BetaToolUnionParam) -> String? {
+        guard let data = try? HTTPTransport.encoder.encode(definition),
+              let json = try? HTTPTransport.decoder.decode(JSONValue.self, from: data)
+        else { return nil }
+        return json["name"]?.stringValue
+    }
+
+    private static func apply(_ change: BetaCompactionToolChangeParam, to available: inout Set<String>) {
+        switch change {
+        case .removal(let removal):
+            if let name = referencedToolName(removal.tool) { available.remove(name) }
+        case .addition(let addition):
+            if let name = addedToolName(addition.tool) { available.insert(name) }
+        case .raw(let json):
+            // A response block's entries, echoed verbatim. Unknown change or tool types are ignored
+            // rather than failing -- forward compatibility, as upstream does.
+            guard let type = json["type"]?.stringValue, let tool = json["tool"] else { return }
+            let name: String?
+            switch tool["type"]?.stringValue {
+            case "tool_reference": name = tool["name"]?.stringValue
+            case "tool_definition": name = tool["definition"]?["name"]?.stringValue
+            default: name = nil
+            }
+            guard let name else { return }
+            if type == "tool_removal" { available.remove(name) } else if type == "tool_addition" { available.insert(name) }
         }
     }
 

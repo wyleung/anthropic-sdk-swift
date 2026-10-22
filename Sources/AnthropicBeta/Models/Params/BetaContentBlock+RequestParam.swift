@@ -1,13 +1,17 @@
 import Foundation
 import Anthropic
 
-/// Converts a fully-`Encodable`, `Decodable`-free response payload into a `JSONValue` by
-/// round-tripping it through `Data`. Used only for `BetaFallbackBlock.trigger`, whose param-side
-/// counterpart is a deliberately untyped `JSONValue?` (the server accepts and ignores whatever
-/// object a caller echoes back here) -- there's no hand-written `BetaFallbackRefusalTrigger` ->
-/// `JSONValue` conversion to keep in sync as that type grows.
+/// Converts a response payload into the `JSONValue` that goes back on the wire, by round-tripping it
+/// through `Data`. Used where the param side is deliberately untyped: `BetaFallbackBlock.trigger` (the
+/// server accepts and ignores whatever object a caller echoes back) and a compaction block's
+/// `toolChanges` (which must be echoed back unchanged, including entry types newer than this port).
+///
+/// The JSON is *wire-shaped*: encoded with the transport's snake_case encoder, so `serverName` becomes
+/// `server_name`. That matters because keys inside a `JSONValue` are plain dictionary keys, which the
+/// request encoder never converts afterwards -- a camelCase key left here would be sent as-is. It is
+/// decoded with a plain decoder, since there is nothing left to convert.
 private func jsonValue(encoding value: some Encodable) throws -> JSONValue {
-    let data = try JSONEncoder().encode(value)
+    let data = try HTTPTransport.encoder.encode(value)
     return try JSONDecoder().decode(JSONValue.self, from: data)
 }
 
@@ -217,8 +221,18 @@ extension BetaContentBlock {
             return .mcpToolResult(BetaRequestMCPToolResultBlockParam(
                 toolUseId: block.toolUseId, content: block.content.asRequestParam(), isError: block.isError
             ))
+        case .mcpToolListing(let block):
+            return .mcpToolListing(BetaMCPToolListingBlockParam(
+                mcpServerName: block.mcpServerName,
+                tools: block.tools.map {
+                    BetaMCPToolParam(name: $0.name, inputSchema: $0.inputSchema, description: $0.description)
+                }
+            ))
         case .compaction(let block):
-            return .compaction(BetaCompactionBlockParam(content: block.content, encryptedContent: block.encryptedContent))
+            return .compaction(BetaCompactionBlockParam(
+                content: block.content, encryptedContent: block.encryptedContent, signature: block.signature,
+                toolChanges: try block.toolChanges?.map { .raw(try jsonValue(encoding: $0)) }
+            ))
         case .fallback(let block):
             return .fallback(BetaFallbackBlockParam(
                 to: block.to, from: block.from, trigger: try jsonValue(encoding: block.trigger)

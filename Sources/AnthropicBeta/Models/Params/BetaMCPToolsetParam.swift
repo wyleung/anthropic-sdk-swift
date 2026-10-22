@@ -8,16 +8,23 @@ public struct BetaMCPToolsetParam: Encodable, Sendable, Equatable {
     public let cacheControl: CacheControlEphemeral?
     public let configs: [String: BetaMCPToolConfigParam]?
     public let defaultConfig: BetaMCPToolDefaultConfigParam?
+    public let tools: [BetaMCPToolParam]?
 
+    /// - Parameter tools: The server's tool listing, pinned: when present, the server is not asked for
+    ///   its tools before sampling, and exactly these entries -- with `defaultConfig` and `configs`
+    ///   applied -- are the toolset's tools. Copy it from the `mcp_tool_listing` block of an earlier
+    ///   response.
     public init(
         mcpServerName: String,
         cacheControl: CacheControlEphemeral? = nil,
         configs: [String: BetaMCPToolConfigParam]? = nil,
-        defaultConfig: BetaMCPToolDefaultConfigParam? = nil
+        defaultConfig: BetaMCPToolDefaultConfigParam? = nil,
+        tools: [BetaMCPToolParam]? = nil
     ) {
         self.mcpServerName = mcpServerName
         self.cacheControl = cacheControl
         self.configs = configs
         self.defaultConfig = defaultConfig
+        self.tools = tools
     }
 }

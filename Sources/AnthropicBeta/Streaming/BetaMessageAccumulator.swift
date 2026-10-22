@@ -102,6 +102,7 @@ struct BetaMessageAccumulator {
                 content: current.content + [start.contentBlock],
                 model: model, container: current.container,
                 contextManagement: current.contextManagement, diagnostics: current.diagnostics,
+                inputTransformations: current.inputTransformations,
                 stopReason: current.stopReason, stopSequence: current.stopSequence,
                 stopDetails: current.stopDetails, usage: current.usage
             )
@@ -138,6 +139,7 @@ struct BetaMessageAccumulator {
             container: delta.delta.container ?? message.container,
             contextManagement: delta.contextManagement ?? message.contextManagement,
             diagnostics: message.diagnostics,
+            inputTransformations: delta.inputTransformations ?? message.inputTransformations,
             stopReason: delta.delta.stopReason,
             stopSequence: delta.delta.stopSequence,
             stopDetails: delta.delta.stopDetails,
@@ -215,6 +217,7 @@ struct BetaMessageAccumulator {
         return BetaMessage(
             id: message.id, content: content, model: message.model, container: message.container,
             contextManagement: message.contextManagement, diagnostics: message.diagnostics,
+            inputTransformations: message.inputTransformations,
             stopReason: message.stopReason, stopSequence: message.stopSequence,
             stopDetails: message.stopDetails, usage: message.usage
         )

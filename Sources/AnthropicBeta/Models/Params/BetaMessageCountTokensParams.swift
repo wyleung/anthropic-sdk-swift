@@ -8,19 +8,19 @@ import Anthropic
 /// `betas`, `userProfileId` and `workspaceId` are headers, not body fields -- pass them to
 /// `countTokens(_:betas:userProfileId:options:)` and `RequestOptions(workspaceId:)`.
 ///
-/// Upstream also accepts `compaction` here, but documents that `count_tokens` ignores it ("the count it
-/// returns is for the conversation in `messages` as sent"), so it is omitted; it will arrive with the
-/// typed compaction config on `BetaMessageCreateParams`.
+/// `compaction` is accepted but ignored by the API ("the count it returns is for the conversation in
+/// `messages` as sent"); it is here so a request built for `create` can be counted unchanged.
 public struct BetaMessageCountTokensParams: Encodable, Sendable, Equatable {
     public let model: String
     public let messages: [BetaMessageParam]
     public let cacheControl: CacheControlEphemeral?
+    public let compaction: BetaCompactionConfigParam?
     public let contextManagement: JSONValue?
     public let mcpServers: [BetaRequestMCPServerURLDefinitionParam]?
     public let outputConfig: BetaOutputConfigParam?
     public let speed: BetaSpeed?
     public let system: SystemPromptParam?
-    public let thinking: ThinkingConfigParam?
+    public let thinking: BetaThinkingConfigParam?
     public let toolChoice: ToolChoiceParam?
     public let tools: [BetaToolUnionParam]?
 
@@ -28,18 +28,20 @@ public struct BetaMessageCountTokensParams: Encodable, Sendable, Equatable {
         model: String,
         messages: [BetaMessageParam],
         cacheControl: CacheControlEphemeral? = nil,
+        compaction: BetaCompactionConfigParam? = nil,
         contextManagement: JSONValue? = nil,
         mcpServers: [BetaRequestMCPServerURLDefinitionParam]? = nil,
         outputConfig: BetaOutputConfigParam? = nil,
         speed: BetaSpeed? = nil,
         system: SystemPromptParam? = nil,
-        thinking: ThinkingConfigParam? = nil,
+        thinking: BetaThinkingConfigParam? = nil,
         toolChoice: ToolChoiceParam? = nil,
         tools: [BetaToolUnionParam]? = nil
     ) {
         self.model = model
         self.messages = messages
         self.cacheControl = cacheControl
+        self.compaction = compaction
         self.contextManagement = contextManagement
         self.mcpServers = mcpServers
         self.outputConfig = outputConfig

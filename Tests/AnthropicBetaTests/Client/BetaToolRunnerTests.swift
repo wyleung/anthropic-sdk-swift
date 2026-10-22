@@ -483,4 +483,106 @@ final class BetaToolRunnerTests: XCTestCase {
         XCTAssertEqual(toolResultContent[0]["content"] as? String, "echoed")
         XCTAssertNil(toolResultContent[0]["is_error"])
     }
+
+    // MARK: - inline tool definitions and compaction tool_changes
+
+    private func runEchoTurn(messages: [BetaMessageParam]) async throws -> (toolWasCalled: Bool, result: [String: Any]) {
+        let responder = SequencedResponder([
+            Self.messageFixture(
+                id: "msg_1", content: #"[{"type": "tool_use", "id": "toolu_1", "name": "echo", "input": {}}]"#, stopReason: "tool_use"
+            ),
+            Self.messageFixture(id: "msg_2", content: #"[{"type": "text", "text": "ok"}]"#, stopReason: "end_turn"),
+        ])
+        let called = Flag()
+        let tool = AnyAnthropicTool(ClosureTool(name: "echo") { _, _ in
+            called.value = true
+            return .text("echoed")
+        })
+        let runner = makeRunner(responder: responder, tools: [tool], messages: messages)
+        _ = try await runner.run()
+        let second = try XCTUnwrap(responder.requestBodies[1]["messages"] as? [[String: Any]])
+        let content = try XCTUnwrap(second.last?["content"] as? [[String: Any]])
+        return (called.value, content[0])
+    }
+
+    private func removeEcho() -> BetaContentBlockParam {
+        .toolRemoval(BetaRequestToolRemovalBlockParam(tool: .tool(BetaToolChangeToolReferenceParam(name: "echo"))))
+    }
+
+    func testToolAdditionByDefinitionNamesTheToolSoItIsAvailableAgain() async throws {
+        let system = BetaMessageParam(role: .system, content: [
+            removeEcho(),
+            .toolAddition(BetaRequestToolAdditionBlockParam(
+                definition: .tool(.custom(ToolParam(name: "echo", inputSchema: .object(["type": .string("object")]))))
+            )),
+        ])
+        let (called, result) = try await runEchoTurn(messages: [system, .user("Hi")])
+        XCTAssertTrue(called, "a by-value definition carries the tool's name, so it re-adds the tool")
+        XCTAssertEqual(result["content"] as? String, "echoed")
+    }
+
+    func testAnAdditionByDefinitionOfAnUnnamedToolsetIsIgnoredNotACrash() async throws {
+        // An mcp_toolset has no `name`, so it can never name a locally runnable tool.
+        let system = BetaMessageParam(role: .system, content: [
+            removeEcho(),
+            .toolAddition(BetaRequestToolAdditionBlockParam(definition: .mcpToolset(BetaMCPToolsetParam(mcpServerName: "docs")))),
+        ])
+        let (called, result) = try await runEchoTurn(messages: [system, .user("Hi")])
+        XCTAssertFalse(called)
+        XCTAssertEqual(result["is_error"] as? Bool, true)
+    }
+
+    func testACompactionBlocksToolChangesInAnAssistantMessageAreFolded() async throws {
+        // After compaction the summarized system messages are gone; the block's tool_changes carry their
+        // effect. Forgetting them would silently resurrect a tool the conversation had withdrawn.
+        let assistant = BetaMessageParam(role: .assistant, content: [
+            .compaction(BetaCompactionBlockParam(
+                content: "summary", signature: "sig",
+                toolChanges: [.removal(BetaRequestToolRemovalBlockParam(tool: .tool(BetaToolChangeToolReferenceParam(name: "echo"))))]
+            )),
+        ])
+        let (called, result) = try await runEchoTurn(messages: [assistant, .user("Hi")])
+        XCTAssertFalse(called)
+        XCTAssertEqual(result["content"] as? String, "Error: Tool 'echo' not found")
+    }
+
+    func testCompactionToolChangesEchoedVerbatimFromAResponseAreFoldedToo() async throws {
+        // The shape a response block's tool_changes take after `asRequestParam()`: raw wire JSON.
+        let removal: JSONValue = .object(["type": .string("tool_removal"), "tool": .object(["type": .string("tool_reference"), "name": .string("echo")])])
+        let assistant = BetaMessageParam(role: .assistant, content: [
+            .compaction(BetaCompactionBlockParam(content: "s", signature: "x", toolChanges: [.raw(removal)])),
+        ])
+        let (called, _) = try await runEchoTurn(messages: [assistant, .user("Hi")])
+        XCTAssertFalse(called)
+
+        let readdition: JSONValue = .object(["type": .string("tool_addition"), "tool": .object([
+            "type": .string("tool_definition"), "definition": .object(["name": .string("echo"), "input_schema": .object([:])]),
+        ])])
+        let both = BetaMessageParam(role: .assistant, content: [
+            .compaction(BetaCompactionBlockParam(content: "s", signature: "x", toolChanges: [.raw(removal), .raw(readdition)])),
+        ])
+        let (calledAgain, _) = try await runEchoTurn(messages: [both, .user("Hi")])
+        XCTAssertTrue(calledAgain, "a raw definition addition after a removal restores the tool")
+    }
+
+    func testUnrecognizedRawToolChangesAreIgnoredForForwardCompatibility() async throws {
+        let assistant = BetaMessageParam(role: .assistant, content: [
+            .compaction(BetaCompactionBlockParam(content: "s", signature: "x", toolChanges: [
+                .raw(.object(["type": .string("tool_banana"), "tool": .object(["type": .string("mystery"), "name": .string("echo")])])),
+                .raw(.string("not even an object")),
+            ])),
+        ])
+        let (called, _) = try await runEchoTurn(messages: [assistant, .user("Hi")])
+        XCTAssertTrue(called, "nothing recognizable changed, so echo stays available")
+    }
+
+    func testAToolChangesBlockOutsideAnAssistantMessageIsNotFolded() async throws {
+        let user = BetaMessageParam(role: .user, content: [
+            .compaction(BetaCompactionBlockParam(content: "s", signature: "x", toolChanges: [
+                .removal(BetaRequestToolRemovalBlockParam(tool: .tool(BetaToolChangeToolReferenceParam(name: "echo")))),
+            ])),
+        ])
+        let (called, _) = try await runEchoTurn(messages: [user, .user("Hi")])
+        XCTAssertTrue(called)
+    }
 }

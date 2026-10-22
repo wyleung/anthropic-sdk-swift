@@ -189,4 +189,55 @@ final class BetaMessageAccumulatorTests: XCTestCase {
         XCTAssertEqual(stopEvent.index, 0)
         XCTAssertEqual(stopEvent.contentBlock, .text(TextBlock(text: "Hi")))
     }
+
+    // MARK: - input_transformations / diagnostics survive and replace correctly
+
+    private let startWithTransformations = #"""
+    {"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","model":"claude-opus-5-5","content":[],
+    "diagnostics":{"cache_miss_reason":{"type":"model_changed","cache_missed_input_tokens":9}},
+    "input_transformations":[{"type":"thinking_dropped","path":"messages[0].content[0]","reason":"model_binding_mismatch"}],
+    "usage":{"input_tokens":10,"output_tokens":0}}}
+    """#
+
+    private func finish(_ accumulator: inout BetaMessageAccumulator, delta extra: String = "") throws -> BetaMessage {
+        _ = try accumulator.accumulate(try decode(#"{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}"#))
+        _ = try accumulator.accumulate(try decode(#"{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hi"}}"#))
+        return try accumulator.accumulate(try decode(
+            #"{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"output_tokens":5}\#(extra)}"#
+        ))
+    }
+
+    func testMessageStartsInputTransformationsAndDiagnosticsSurviveEveryRebuildWhenTheDeltaOmitsThem() throws {
+        var accumulator = BetaMessageAccumulator()
+        _ = try accumulator.accumulate(try decode(startWithTransformations))
+        let final = try finish(&accumulator)
+
+        XCTAssertEqual(final.inputTransformations?.count, 1)
+        guard case .thinkingDropped(let dropped) = final.inputTransformations?.first else { return XCTFail("expected thinkingDropped") }
+        XCTAssertEqual(dropped.path, "messages[0].content[0]")
+        guard case .modelChanged = final.diagnostics?.cacheMissReason else {
+            return XCTFail("diagnostics lost while streaming: \(String(describing: final.diagnostics))")
+        }
+    }
+
+    func testAMessageDeltaCarryingInputTransformationsReplacesThoseFromMessageStart() throws {
+        // Upstream: only sent on `message_delta` after a mid-stream model fallback, in which case it holds
+        // the serving model's entries and replaces the `message_start` value.
+        var accumulator = BetaMessageAccumulator()
+        _ = try accumulator.accumulate(try decode(startWithTransformations))
+        let final = try finish(&accumulator, delta: #","input_transformations":[{"type":"thinking_mismatch_allowed","path":"p","reason":"prefix_binding_mismatch"}]"#)
+
+        XCTAssertEqual(final.inputTransformations?.count, 1)
+        guard case .thinkingMismatchAllowed = final.inputTransformations?.first else {
+            return XCTFail("delta value should replace, got \(String(describing: final.inputTransformations))")
+        }
+    }
+
+    func testAnEmptyDeltaInputTransformationsStillReplaces() throws {
+        // `[]` is a real value ("nothing to report for the serving model"), not "absent".
+        var accumulator = BetaMessageAccumulator()
+        _ = try accumulator.accumulate(try decode(startWithTransformations))
+        let final = try finish(&accumulator, delta: #","input_transformations":[]"#)
+        XCTAssertEqual(final.inputTransformations, [])
+    }
 }
