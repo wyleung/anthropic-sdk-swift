@@ -6,14 +6,16 @@ Ported by hand from the official [Python](https://github.com/anthropics/anthropi
 
 ## Status
 
-Feature-complete port of the GA API surface plus the full Beta/Managed Agents surface: Messages (including streaming and the tool runner), Models, Files, Batches, Completions, and the credential chain in `Anthropic`; Agents, Sessions (events, resources, threads, SSE streaming), Environments, Deployments, Vaults, Memory Stores, User Profiles, Webhooks, and Tunnels in `AnthropicBeta`. 524/524 tests passing. See `CONTRIBUTING.md` for the porting workflow and conventions, and `REFERENCE.md` for the exact reference-SDK commits this port is synced against.
+Feature-complete port of the GA API surface plus the full Beta/Managed Agents surface: Messages (including streaming and the tool runner), Models, Files, Batches, Completions, and the credential chain in `Anthropic`; Agents, Sessions (events, resources, threads, SSE streaming), Environments, Deployments, Vaults, Memory Stores, User Profiles, Webhooks, and Tunnels in `AnthropicBeta`. See `CHANGELOG.md` for what changed in each release and how to upgrade, `CONTRIBUTING.md` for the porting workflow and conventions, and `REFERENCE.md` for the exact reference-SDK commits this port is synced against.
+
+The package version follows the TypeScript SDK version it is synced to (`1.1.0` is synced to TypeScript `1.1.0`), so you can tell at a glance which reference release your copy corresponds to.
 
 ## Installation
 
 Add the package to your `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/wyleung/anthropic-sdk-swift.git", branch: "main")
+.package(url: "https://github.com/wyleung/anthropic-sdk-swift.git", from: "1.1.0")
 ```
 
 Then depend on `Anthropic` for the GA API, or `AnthropicBeta` for the beta/Managed Agents surface as well:

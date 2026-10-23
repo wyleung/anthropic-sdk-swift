@@ -1,11 +1,12 @@
 # Changelog
 
-The package has no tagged releases yet, so entries are grouped by sync with the reference SDKs (see
-[REFERENCE.md](REFERENCE.md)) rather than by version number.
+Versions follow the TypeScript SDK version this package is synced to (see "Versioning" in
+[REFERENCE.md](REFERENCE.md)), so `1.1.0` is synced to TypeScript `1.1.0` (and Python `2.1.0`).
 
-## Unreleased: API version 2026-10-21 (synced to Python v2.1.0 / TypeScript v1.1.0), 2026-10-23
+## 1.1.0, 2026-10-23
 
-This is a **breaking** update. It follows the reference SDKs' move to API version `2026-10-21`, and it fixes
+The first tagged release; API version `2026-10-21`. Until now the package was used by tracking `main`, and this is
+a **breaking** change for anyone who did. It follows the reference SDKs' move to API version `2026-10-21`, and it fixes
 several bugs in how credentials and headers were handled. Read "Upgrading" first.
 
 ### Upgrading

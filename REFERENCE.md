@@ -9,6 +9,21 @@ This SDK is hand-ported from the official Python and TypeScript SDKs (see [CONTR
 | [anthropic-sdk-python](https://github.com/anthropics/anthropic-sdk-python) | `9313f13a5a643ceed10fafba6785eab8e04b6e6e` | v2.1.0 | 2026-10-23 |
 | [anthropic-sdk-typescript](https://github.com/anthropics/anthropic-sdk-typescript) | `5badc765f17d373405f300ee8e69e7f490b1f172` | v1.1.0 | 2026-10-23 |
 
+## Versioning
+
+The package version is the **TypeScript SDK version it is synced to**, so a number tells you which reference release a
+copy corresponds to: Swift `1.1.0` is TypeScript `1.1.0` (and Python `2.1.0`, as pinned above). Tags are `v<version>`.
+
+To release after a sync:
+
+1. Move the pin (above) and give `CHANGELOG.md` a heading for the new version, with an "Upgrading" section for anything breaking.
+2. Run `swift test --enable-code-coverage`, push, and wait for CI to pass on both runners.
+3. Tag that exact commit (`git tag -a v<version> -m ...`), check SwiftPM resolves it, then push the tag.
+
+A Swift-only fix that must ship before the next sync takes the next patch number (`1.1.1`). At the next sync, use the
+TypeScript version at the new pin; if a Swift-only tag already took that number, use the next free one and say so in the
+changelog. Never retag a version that has been pushed: SwiftPM caches them.
+
 ## Last sync
 
 Re-synced on 2026-10-22/23 from Python `4474f31` (v1.0.0) / TypeScript `bfa9197` (v0.120.0) to the pin above. The record below is what was decided, ported, and deliberately left out, so the next sync does not re-litigate it.
