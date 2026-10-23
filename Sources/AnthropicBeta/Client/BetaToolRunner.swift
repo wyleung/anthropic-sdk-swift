@@ -31,6 +31,17 @@ import Anthropic
 ///   base registry to decide what's dispatchable *right now*; a `tool_use` block naming a tool
 ///   that's registered but not currently available is treated the same as one that's unregistered.
 ///
+/// Three things can change while a run is in flight, each callable from a hook, another task, or a tool
+/// body:
+///
+/// - ``addTools(_:)`` / ``addTools(definitions:)`` and ``removeTools(_:)`` change the tools the model
+///   can use *without* touching the `tools` param, which would miss the prompt cache. The runner acts
+///   on them at once and tells the model in `tool_addition` / `tool_removal` blocks it sends, in one
+///   `system` message, before the next request. Requires the `inline-tools-2026-09-15` beta.
+/// - ``compactBeforeNextTurn(_:)`` replaces the conversation with a summary: the next request becomes a
+///   compaction request, and the signed `compaction` block that comes back replaces the history.
+///   Requires the `compact-2026-09-04` beta.
+///
 /// Out of scope: Python's `@beta_tool` decorator/reflection-based schema derivation -- Swift has no
 /// runtime reflection over function parameters, so (like GA's `ToolRunner`) callers always supply an
 /// explicit `AnthropicTool`.
@@ -39,7 +50,7 @@ import Anthropic
 /// and both reference SDKs' runner classes, one `BetaToolRunner` drives one linear conversation.
 public final class BetaToolRunner {
     private let client: AnthropicClient
-    private let toolsByName: [String: AnyAnthropicTool]
+    private let registry: BetaToolRegistry
     private let betas: [String]
     private let userProfileId: String?
     private let options: RequestOptions
@@ -50,6 +61,7 @@ public final class BetaToolRunner {
 
     /// Runs immediately before every `beta.messages.create` call; lets a caller inspect or rewrite
     /// the request (e.g. trimming history) each turn. Mirrors `set_messages_params`/an equivalent hook.
+    /// Not applied to a compaction request, whose params are fixed by the compaction.
     public var beforeRequest: ((BetaMessageCreateParams) -> BetaMessageCreateParams)?
     /// Runs after the assistant turn and tool executions are batched into their two messages, right
     /// before they're appended to the conversation. Mirrors `append_messages`.
@@ -57,6 +69,15 @@ public final class BetaToolRunner {
     /// Runs on the batched `{role: "user", ...}` tool-result message before it's appended, letting a
     /// caller rewrite it (e.g. to add `cache_control`). Mirrors `generate_tool_call_response`.
     public var onToolCallResponse: ((BetaMessageParam) -> BetaMessageParam)?
+    /// Runs when a compaction response has replaced the conversation (see ``compactBeforeNextTurn(_:)``),
+    /// with that response (`stopReason == .compaction`). The reference runners yield it as an item of
+    /// their iteration; ``run()`` still returns the last *turn* rather than the compaction.
+    public var onCompaction: ((BetaMessage) -> Void)?
+
+    /// The conversation the next request will send. Read it from a hook, or after ``run()`` returns --
+    /// for instance to carry on from the compacted history. It is the loop's own state, so reading it
+    /// from another task while a run is in flight is a race.
+    public var messages: [BetaMessageParam] { params.messages }
 
     public init(
         client: AnthropicClient,
@@ -68,7 +89,7 @@ public final class BetaToolRunner {
         maxIterations: Int? = nil
     ) {
         self.client = client
-        self.toolsByName = Dictionary(tools.map { ($0.name, $0) }, uniquingKeysWith: { _, latest in latest })
+        self.registry = BetaToolRegistry(tools: tools)
         self.betas = betas
         self.userProfileId = userProfileId
         self.options = options
@@ -76,11 +97,76 @@ public final class BetaToolRunner {
         self.params = params.with(tools: (params.tools ?? []) + tools.map { .tool(.custom($0.toolParam)) })
     }
 
-    /// Runs the loop to completion -- until the model stops requesting tool calls, issues a
-    /// refusal, or `maxIterations` is reached -- and returns the final `BetaMessage`.
+    // MARK: - Changing a run in flight
+
+    /// Gives the model more function tools without changing the `tools` param. They run straight away,
+    /// in place of any tool of the same name, even for a call already in the message being handled; the
+    /// model is told in `tool_addition` blocks with the next request. Requires the
+    /// `inline-tools-2026-09-15` beta.
+    public func addTools(_ tools: [AnyAnthropicTool]) {
+        registry.add(tools)
+    }
+
+    /// Gives the model more tools by definition -- for server tools such as web search. The runner never
+    /// runs these, and stops running a function tool of the same name. Requires the
+    /// `inline-tools-2026-09-15` beta.
+    public func addTools(definitions: [BetaToolUnionParam]) {
+        registry.add(definitions: definitions)
+    }
+
+    /// Takes tools away from the model without changing the `tools` param. They stop being run at once,
+    /// and the model is told in `tool_removal` blocks with the next request. Requires the
+    /// `inline-tools-2026-09-15` beta.
+    public func removeTools(_ names: [String]) {
+        registry.remove(names: names)
+    }
+
+    public func removeTools(_ tools: [AnyAnthropicTool]) {
+        registry.remove(names: tools.map(\.name))
+    }
+
+    /// Compacts the conversation before the model's next turn.
+    ///
+    /// This only schedules the compaction. Once the current turn has finished, including any tool calls,
+    /// the runner sends a compaction request and replaces the message history with the response the API
+    /// returns (``onCompaction`` is called with it), then carries on. If the run ends first, the final
+    /// turn is added to the history and compacted, so ``messages`` is the compacted conversation -- but
+    /// not when that turn ended with tool calls whose results were never sent: the API cannot compact
+    /// a conversation with an unanswered tool call, so the request is dropped. Calling this again before
+    /// it runs replaces the pending request. Requires the `compact-2026-09-04` beta.
+    ///
+    /// - Throws: ``AnthropicError/invalidArgument(message:)`` when the request's `context_management`
+    ///   already has a compaction edit; the API does not accept a compaction block together with one.
+    public func compactBeforeNextTurn(_ compaction: BetaCompactionConfigParam = BetaCompactionConfigParam()) throws {
+        try Self.requireNoCompactionEdit(in: params)
+        registry.scheduleCompaction(compaction)
+    }
+
+    // MARK: - Running
+
+    /// Runs the loop to completion -- until the model's turn needs no more tool calls, or
+    /// `maxIterations` is reached -- and returns the final `BetaMessage`.
     public func run() async throws -> BetaMessage {
+        if params.compaction != nil {
+            throw AnthropicError.invalidArgument(
+                message: "`compaction` cannot be set on a tool runner: every request in the loop would compact "
+                    + "again. Call `compactBeforeNextTurn()` when the conversation should be compacted instead."
+            )
+        }
         var iterations = 0
+        var lastStopReason: BetaStopReason?
         while maxIterations.map({ iterations < $0 }) ?? true {
+            // A paused turn has to go back as the last message, so queued tool changes wait for the
+            // request after it. They are not appended through `onAppendMessages`: that is for the turn's
+            // own messages.
+            if lastStopReason != .pauseTurn, let changes = registry.takePendingToolChangesMessage() {
+                params = params.with(messages: params.messages + [changes])
+            }
+            // The API cannot compact a conversation that ends mid-turn, so a paused turn is resumed first.
+            if Self.step(after: lastStopReason) != .resume, let compaction = registry.takePendingCompaction() {
+                try await compact(compaction)
+                continue
+            }
             iterations += 1
 
             var requestParams = params
@@ -91,10 +177,12 @@ public final class BetaToolRunner {
                 requestParams, betas: betas, userProfileId: userProfileId, options: options
             )
             lastMessage = message
+            lastStopReason = message.stopReason
             propagateContainer(from: message)
 
             let step = Self.step(after: message.stopReason)
             if step == .stop {
+                try await compactAfterFinalTurn(message)
                 break
             }
             let assistantMessage = try message.asRequestParam()
@@ -108,12 +196,16 @@ public final class BetaToolRunner {
                 if case .toolUse(let toolUse) = block { return toolUse }
                 return nil
             }
-            guard !toolUseBlocks.isEmpty else { break }
+            guard !toolUseBlocks.isEmpty else {
+                try await compactAfterFinalTurn(message)
+                break
+            }
 
-            let available = availableToolNames()
-            let toolResults = await Self.executeToolUseBlocks(
-                toolUseBlocks, toolsByName: toolsByName, available: available
-            )
+            let history = params.messages
+            let registry = self.registry
+            let toolResults = await Self.executeToolUseBlocks(toolUseBlocks) { name in
+                registry.tool(named: name, history: history)
+            }
             var toolResultMessage = BetaMessageParam(
                 role: .user,
                 content: toolResults.map { .standard(.toolResult($0)) }
@@ -136,6 +228,49 @@ public final class BetaToolRunner {
         return lastMessage
     }
 
+    // MARK: - Compaction
+
+    private static func requireNoCompactionEdit(in params: BetaMessageCreateParams) throws {
+        guard params.hasCompactionEdit else { return }
+        throw AnthropicError.invalidArgument(
+            message: "`compactBeforeNextTurn()` can't be used while `context_management` has a compaction edit, "
+                + "because the API doesn't accept a compaction block together with one. Remove the edit first."
+        )
+    }
+
+    /// Sends the compaction request and, if it produced a summary, replaces the conversation with it.
+    /// Not counted as an iteration.
+    private func compact(_ compaction: BetaCompactionConfigParam) async throws {
+        try Self.requireNoCompactionEdit(in: params)
+        let message = try await client.beta.messages.create(
+            params.forCompactionRequest(compaction), betas: betas, userProfileId: userProfileId, options: options
+        )
+        // Summary or not, the request went out with any edit made before it. Without a summary there is
+        // nothing to replace the conversation with, so it carries on as it was.
+        guard message.content.contains(where: { block in
+            if case .compaction(let compactionBlock) = block { return !(compactionBlock.content ?? "").isEmpty }
+            return false
+        }) else { return }
+        // The summary stands in for the turns it replaced, so a tool they withdrew has to stay withdrawn.
+        registry.dropWithdrawnTools(history: params.messages)
+        // The response has to be sent back as it came, first, replacing the messages it summarizes.
+        params = params.with(messages: [try message.asRequestParam()])
+        onCompaction?(message)
+    }
+
+    /// A compaction scheduled when the run's last turn finished: that turn joins the history first, so the
+    /// summary includes the answer.
+    private func compactAfterFinalTurn(_ message: BetaMessage) async throws {
+        guard let compaction = registry.takePendingCompaction() else { return }
+        // A turn that was cut short can end with tool calls that are never run, and the API can't compact a
+        // conversation whose last turn has an unanswered tool call.
+        if message.content.contains(where: { if case .toolUse = $0 { return true } else { return false } }) {
+            return
+        }
+        params = params.with(messages: params.messages + [try message.asRequestParam()])
+        try await compact(compaction)
+    }
+
     /// Fills in a response's container id on the next request, but only when nothing was pinned
     /// there already -- matching the TypeScript runner's non-clobbering behavior rather than
     /// Python's unconditional overwrite, so a container id a caller explicitly set up front always
@@ -150,82 +285,6 @@ public final class BetaToolRunner {
         case .container(let existing):
             guard existing.id == nil else { return }
             params = params.with(container: .container(ContainerParams(id: container.id, skills: existing.skills)))
-        }
-    }
-
-    /// The set of tool names dispatchable right now: every locally-registered tool, with any
-    /// `tool_removal`/`tool_addition` block already in the conversation folded in, in order. Those
-    /// arrive in `system` messages, and in the `toolChanges` of a `compaction` block in an `assistant`
-    /// message -- which stands in for the system messages of the turns it summarized, so ignoring it
-    /// would forget every tool change made before the compaction. Evaluated against `params.messages`
-    /// *before* the current turn's new messages are appended, since those blocks only ever describe a
-    /// change taking effect from that point in the conversation onward.
-    private func availableToolNames() -> Set<String> {
-        var available = Set(toolsByName.keys)
-        for message in params.messages {
-            for block in message.content {
-                switch (message.role, block) {
-                case (.system, .toolRemoval(let removal)):
-                    if let name = Self.referencedToolName(removal.tool) { available.remove(name) }
-                case (.system, .toolAddition(let addition)):
-                    if let name = Self.addedToolName(addition.tool) { available.insert(name) }
-                case (.assistant, .compaction(let compaction)):
-                    for change in compaction.toolChanges ?? [] {
-                        Self.apply(change, to: &available)
-                    }
-                default:
-                    continue
-                }
-            }
-        }
-        return available
-    }
-
-    /// Only a direct-by-name reference resolves to a locally dispatchable tool. MCP references name
-    /// a server-side tool or an entire server's toolset -- neither is something `toolsByName` could
-    /// ever hold, so both resolve to `nil` and are ignored for local dispatch.
-    private static func referencedToolName(_ reference: BetaToolChangeReferenceParam) -> String? {
-        switch reference {
-        case .tool(let toolReference): return toolReference.name
-        case .mcpTool, .mcpToolset: return nil
-        }
-    }
-
-    /// An addition names a runnable tool either by reference or, for inline tools, by the `name` its
-    /// full definition carries. Not every definition has one (an `mcp_toolset` doesn't), and those are
-    /// never locally runnable.
-    private static func addedToolName(_ target: BetaToolAdditionParam) -> String? {
-        switch target {
-        case .reference(let reference): return referencedToolName(reference)
-        case .definition(let definition): return definitionName(definition.definition)
-        }
-    }
-
-    private static func definitionName(_ definition: BetaToolUnionParam) -> String? {
-        guard let data = try? HTTPTransport.encoder.encode(definition),
-              let json = try? HTTPTransport.decoder.decode(JSONValue.self, from: data)
-        else { return nil }
-        return json["name"]?.stringValue
-    }
-
-    private static func apply(_ change: BetaCompactionToolChangeParam, to available: inout Set<String>) {
-        switch change {
-        case .removal(let removal):
-            if let name = referencedToolName(removal.tool) { available.remove(name) }
-        case .addition(let addition):
-            if let name = addedToolName(addition.tool) { available.insert(name) }
-        case .raw(let json):
-            // A response block's entries, echoed verbatim. Unknown change or tool types are ignored
-            // rather than failing -- forward compatibility, as upstream does.
-            guard let type = json["type"]?.stringValue, let tool = json["tool"] else { return }
-            let name: String?
-            switch tool["type"]?.stringValue {
-            case "tool_reference": name = tool["name"]?.stringValue
-            case "tool_definition": name = tool["definition"]?["name"]?.stringValue
-            default: name = nil
-            }
-            guard let name else { return }
-            if type == "tool_removal" { available.remove(name) } else if type == "tool_addition" { available.insert(name) }
         }
     }
 
@@ -246,12 +305,11 @@ public final class BetaToolRunner {
 
     private static func executeToolUseBlocks(
         _ blocks: [ToolUseBlock],
-        toolsByName: [String: AnyAnthropicTool],
-        available: Set<String>
+        resolve: @escaping @Sendable (String) -> AnyAnthropicTool?
     ) async -> [ToolResultBlockParam] {
         await withTaskGroup(of: (Int, ToolResultBlockParam).self) { group in
             for (index, block) in blocks.enumerated() {
-                group.addTask { (index, await executeSingle(block, toolsByName: toolsByName, available: available)) }
+                group.addTask { (index, await executeSingle(block, resolve: resolve)) }
             }
             var byIndex: [Int: ToolResultBlockParam] = [:]
             for await (index, result) in group {
@@ -263,10 +321,9 @@ public final class BetaToolRunner {
 
     private static func executeSingle(
         _ block: ToolUseBlock,
-        toolsByName: [String: AnyAnthropicTool],
-        available: Set<String>
+        resolve: @Sendable (String) -> AnyAnthropicTool?
     ) async -> ToolResultBlockParam {
-        guard available.contains(block.name), let tool = toolsByName[block.name] else {
+        guard let tool = resolve(block.name) else {
             return ToolResultBlockParam(
                 toolUseId: block.id,
                 content: .text("Error: Tool '\(block.name)' not found"),

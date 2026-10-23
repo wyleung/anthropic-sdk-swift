@@ -88,6 +88,20 @@ private final class BatchLog: @unchecked Sendable {
     }
 }
 
+/// Lets a tool body or a hook reach the runner it runs in; assigned once, right after the runner exists.
+private final class RunnerBox: @unchecked Sendable {
+    var runner: BetaToolRunner?
+}
+
+/// Records message ids passed to a hook.
+private final class IDLog: @unchecked Sendable {
+    private(set) var ids: [String] = []
+
+    func add(_ id: String) {
+        ids.append(id)
+    }
+}
+
 final class BetaToolRunnerTests: XCTestCase {
     override func tearDown() {
         MockURLProtocol.responder = nil
@@ -259,6 +273,405 @@ final class BetaToolRunnerTests: XCTestCase {
 
         XCTAssertEqual(finalMessage.id, "msg_2")
         XCTAssertFalse(toolWasCalled.value)
+    }
+
+    // MARK: - Changing a run in flight: addTools / removeTools
+
+    private static func toolUse(_ id: String, _ name: String) -> String {
+        #"[{"type": "tool_use", "id": "\#(id)", "name": "\#(name)", "input": {}}]"#
+    }
+
+    private static let endTurnContent = #"[{"type": "text", "text": "Done!"}]"#
+    private static let compactionContent = #"[{"type": "compaction", "content": "Summary.", "signature": "sig-1"}]"#
+
+    private func makeRunner(
+        responder: SequencedResponder, params: BetaMessageCreateParams, tools: [AnyAnthropicTool]
+    ) -> BetaToolRunner {
+        MockURLProtocol.responder = { try responder.respond(to: $0) }
+        let client = AnthropicClient(apiKey: "test-key", urlSession: MockURLProtocol.makeSession())
+        return BetaToolRunner(client: client, params: params, tools: tools)
+    }
+
+    private var baseParams: BetaMessageCreateParams {
+        BetaMessageCreateParams(model: "claude-opus-5", maxTokens: 256, messages: [.user("Hi")])
+    }
+
+    /// The `index`th request body, failing the test (rather than crashing) when it was never made.
+    private func request(_ index: Int, of responder: SequencedResponder) throws -> [String: Any] {
+        try XCTUnwrap(
+            responder.requestBodies.indices.contains(index) ? responder.requestBodies[index] : nil,
+            "request \(index + 1) was never made (\(responder.requestBodies.count) were)"
+        )
+    }
+
+    private func messages(of body: [String: Any]) -> [[String: Any]] {
+        body["messages"] as? [[String: Any]] ?? []
+    }
+
+    private func toolNames(of body: [String: Any]) -> [String] {
+        (body["tools"] as? [[String: Any]])?.compactMap { $0["name"] as? String } ?? []
+    }
+
+    func testAddedFunctionToolRunsAtOnceAndTheModelIsToldBeforeTheNextRequest() async throws {
+        let box = RunnerBox()
+        let late = AnyAnthropicTool(ClosureTool(name: "late") { _, _ in .text("late ran") })
+        let starter = AnyAnthropicTool(ClosureTool(name: "starter") { _, _ in
+            box.runner?.addTools([late])
+            return .text("added")
+        })
+        let responder = SequencedResponder([
+            Self.messageFixture(id: "msg_1", content: Self.toolUse("toolu_1", "starter"), stopReason: "tool_use"),
+            Self.messageFixture(id: "msg_2", content: Self.toolUse("toolu_2", "late"), stopReason: "tool_use"),
+            Self.messageFixture(id: "msg_3", content: Self.endTurnContent, stopReason: "end_turn"),
+        ])
+        let runner = makeRunner(responder: responder, params: baseParams, tools: [starter])
+        box.runner = runner
+
+        let final = try await runner.run()
+
+        XCTAssertEqual(final.id, "msg_3")
+        XCTAssertEqual(responder.requestBodies.count, 3)
+        for index in 0..<3 {
+            XCTAssertEqual(toolNames(of: try request(index, of: responder)), ["starter"], "the tools param must not change")
+        }
+        XCTAssertFalse(messages(of: try request(0, of: responder)).contains { $0["role"] as? String == "system" })
+        let told = try XCTUnwrap(messages(of: try request(1, of: responder)).last)
+        XCTAssertEqual(told["role"] as? String, "system")
+        let addition = try XCTUnwrap((told["content"] as? [[String: Any]])?.first)
+        XCTAssertEqual(addition["type"] as? String, "tool_addition")
+        let tool = try XCTUnwrap(addition["tool"] as? [String: Any])
+        XCTAssertEqual(tool["type"] as? String, "tool_definition")
+        XCTAssertEqual((tool["definition"] as? [String: Any])?["name"] as? String, "late")
+        // And the added tool really ran: its result is in the last request.
+        let result = try XCTUnwrap((messages(of: try request(2, of: responder)).last?["content"] as? [[String: Any]])?.first)
+        XCTAssertEqual(result["tool_use_id"] as? String, "toolu_2")
+        XCTAssertEqual(result["content"] as? String, "late ran")
+    }
+
+    func testRemovedToolStopsRunningAtOnceAndTheModelIsToldBeforeTheNextRequest() async throws {
+        let box = RunnerBox()
+        let echoWasCalled = Flag()
+        let echo = AnyAnthropicTool(ClosureTool(name: "echo") { _, _ in
+            echoWasCalled.value = true
+            return .text("should never run")
+        })
+        let starter = AnyAnthropicTool(ClosureTool(name: "starter") { _, _ in
+            box.runner?.removeTools(["echo"])
+            return .text("removed")
+        })
+        let responder = SequencedResponder([
+            Self.messageFixture(id: "msg_1", content: Self.toolUse("toolu_1", "starter"), stopReason: "tool_use"),
+            Self.messageFixture(id: "msg_2", content: Self.toolUse("toolu_2", "echo"), stopReason: "tool_use"),
+            Self.messageFixture(id: "msg_3", content: Self.endTurnContent, stopReason: "end_turn"),
+        ])
+        let runner = makeRunner(responder: responder, params: baseParams, tools: [starter, echo])
+        box.runner = runner
+
+        _ = try await runner.run()
+
+        XCTAssertFalse(echoWasCalled.value)
+        for index in 0..<3 {
+            XCTAssertEqual(toolNames(of: try request(index, of: responder)), ["starter", "echo"], "the tools param must not change")
+        }
+        let told = try XCTUnwrap(messages(of: try request(1, of: responder)).last)
+        XCTAssertEqual(told["role"] as? String, "system")
+        let removal = try XCTUnwrap((told["content"] as? [[String: Any]])?.first)
+        XCTAssertEqual(removal["type"] as? String, "tool_removal")
+        XCTAssertEqual((removal["tool"] as? [String: Any])?["type"] as? String, "tool_reference")
+        XCTAssertEqual((removal["tool"] as? [String: Any])?["name"] as? String, "echo")
+        let result = try XCTUnwrap((messages(of: try request(2, of: responder)).last?["content"] as? [[String: Any]])?.first)
+        XCTAssertEqual(result["is_error"] as? Bool, true)
+        XCTAssertEqual(result["content"] as? String, "Error: Tool 'echo' not found")
+    }
+
+    func testAnAddedDefinitionIsNeverRunAndReplacesAFunctionToolOfTheSameName() async throws {
+        let box = RunnerBox()
+        let echoWasCalled = Flag()
+        let echo = AnyAnthropicTool(ClosureTool(name: "echo") { _, _ in
+            echoWasCalled.value = true
+            return .text("should never run")
+        })
+        let starter = AnyAnthropicTool(ClosureTool(name: "starter") { _, _ in
+            box.runner?.addTools(definitions: [.tool(.custom(ToolParam(name: "echo", inputSchema: .object([:]))))])
+            return .text("redefined")
+        })
+        let responder = SequencedResponder([
+            Self.messageFixture(id: "msg_1", content: Self.toolUse("toolu_1", "starter"), stopReason: "tool_use"),
+            Self.messageFixture(id: "msg_2", content: Self.toolUse("toolu_2", "echo"), stopReason: "tool_use"),
+            Self.messageFixture(id: "msg_3", content: Self.endTurnContent, stopReason: "end_turn"),
+        ])
+        let runner = makeRunner(responder: responder, params: baseParams, tools: [starter, echo])
+        box.runner = runner
+
+        _ = try await runner.run()
+
+        XCTAssertFalse(echoWasCalled.value, "a raw definition is not runnable here, and it replaces the function tool")
+        let told = try XCTUnwrap(messages(of: try request(1, of: responder)).last)
+        let addition = try XCTUnwrap((told["content"] as? [[String: Any]])?.first)
+        XCTAssertEqual(addition["type"] as? String, "tool_addition")
+        XCTAssertEqual(((addition["tool"] as? [String: Any])?["definition"] as? [String: Any])?["name"] as? String, "echo")
+    }
+
+    /// A turn that stopped on `pause_turn` is sent back to be continued, so it has to stay last: the
+    /// changes wait for the request after it.
+    func testToolChangesWaitOutAPausedTurn() async throws {
+        let box = RunnerBox()
+        let added = Flag()
+        let late = AnyAnthropicTool(ClosureTool(name: "late") { _, _ in .text("late ran") })
+        let responder = SequencedResponder([
+            Self.messageFixture(id: "msg_1", content: Self.endTurnContent, stopReason: "pause_turn"),
+            Self.messageFixture(id: "msg_2", content: Self.toolUse("toolu_2", "late"), stopReason: "tool_use"),
+            Self.messageFixture(id: "msg_3", content: Self.endTurnContent, stopReason: "end_turn"),
+        ])
+        let runner = makeRunner(responder: responder, params: baseParams, tools: [])
+        box.runner = runner
+        runner.onAppendMessages = { _ in
+            guard !added.value else { return }
+            added.value = true
+            box.runner?.addTools([late])
+        }
+
+        _ = try await runner.run()
+
+        let second = messages(of: try request(1, of: responder))
+        XCTAssertEqual(second.map { $0["role"] as? String }, ["user", "assistant"], "the paused turn stays last")
+        let third = messages(of: try request(2, of: responder))
+        XCTAssertEqual(third.last?["role"] as? String, "system", "the changes go out with the request after it")
+        XCTAssertEqual(((third.last?["content"] as? [[String: Any]])?.first)?["type"] as? String, "tool_addition")
+    }
+
+    // MARK: - Compaction
+
+    private func compactionParams(
+        contextManagement: JSONValue? = nil, stopSequences: [String]? = nil,
+        toolChoice: ToolChoiceParam? = nil, outputConfig: BetaOutputConfigParam? = nil
+    ) -> BetaMessageCreateParams {
+        BetaMessageCreateParams(
+            model: "claude-opus-5", maxTokens: 256, messages: [.user("Hi")],
+            contextManagement: contextManagement, outputConfig: outputConfig,
+            stopSequences: stopSequences, toolChoice: toolChoice
+        )
+    }
+
+    func testCompactionRequestReplacesTheHistoryAndTheRunCarriesOn() async throws {
+        let box = RunnerBox()
+        let scheduled = Flag()
+        let compacted = IDLog()
+        let starter = AnyAnthropicTool(ClosureTool(name: "starter") { _, _ in .text("ok") })
+        let responder = SequencedResponder([
+            Self.messageFixture(id: "msg_1", content: Self.toolUse("toolu_1", "starter"), stopReason: "tool_use"),
+            Self.messageFixture(id: "msg_c", content: Self.compactionContent, stopReason: "compaction"),
+            Self.messageFixture(id: "msg_3", content: Self.endTurnContent, stopReason: "end_turn"),
+        ])
+        let params = compactionParams(
+            contextManagement: .object(["edits": .array([.object(["type": .string("clear_tool_uses_20250919")])])]),
+            stopSequences: ["STOP"],
+            toolChoice: .any(ToolChoiceAnyParam()),
+            outputConfig: BetaOutputConfigParam(effort: .high, format: JSONOutputFormatParam(schema: .object([:])))
+        )
+        let runner = makeRunner(responder: responder, params: params, tools: [starter])
+        box.runner = runner
+        runner.onAppendMessages = { _ in
+            guard !scheduled.value else { return }
+            scheduled.value = true
+            try? box.runner?.compactBeforeNextTurn()
+        }
+        runner.onCompaction = { compacted.add($0.id) }
+
+        let final = try await runner.run()
+
+        XCTAssertEqual(final.id, "msg_3", "run() returns the last turn, not the compaction")
+        XCTAssertEqual(compacted.ids, ["msg_c"])
+        XCTAssertEqual(responder.requestBodies.count, 3)
+
+        let compaction = try request(1, of: responder)
+        XCTAssertEqual((compaction["compaction"] as? [String: Any])?["type"] as? String, "summarize")
+        XCTAssertEqual(messages(of: compaction).count, 3, "the whole conversation so far is what gets summarized")
+        for key in ["context_management", "stop_sequences", "tool_choice"] {
+            XCTAssertNil(compaction[key], "\(key) only shapes a reply, which a compaction request doesn't make")
+        }
+        XCTAssertEqual((compaction["output_config"] as? [String: Any])?["effort"] as? String, "high")
+        XCTAssertNil((compaction["output_config"] as? [String: Any])?["format"])
+
+        let next = try request(2, of: responder)
+        XCTAssertNil(next["compaction"], "only the one request compacts")
+        let history = messages(of: next)
+        XCTAssertEqual(history.count, 1, "the summary replaces everything it summarizes")
+        XCTAssertEqual(history.first?["role"] as? String, "assistant")
+        let block = try XCTUnwrap((history.first?["content"] as? [[String: Any]])?.first)
+        XCTAssertEqual(block["type"] as? String, "compaction")
+        XCTAssertEqual(block["signature"] as? String, "sig-1", "echoed back verbatim")
+        for key in ["context_management", "stop_sequences", "tool_choice"] {
+            XCTAssertNotNil(next[key], "\(key) is only dropped for the compaction request itself")
+        }
+        XCTAssertNotNil((next["output_config"] as? [String: Any])?["format"])
+    }
+
+    func testCompactionScheduledOnTheFinalTurnCompactsAfterAddingIt() async throws {
+        let box = RunnerBox()
+        let scheduled = Flag()
+        let responder = SequencedResponder([
+            Self.messageFixture(id: "msg_1", content: Self.endTurnContent, stopReason: "end_turn"),
+            Self.messageFixture(id: "msg_c", content: Self.compactionContent, stopReason: "compaction"),
+        ])
+        let runner = makeRunner(responder: responder, params: baseParams, tools: [])
+        box.runner = runner
+        runner.beforeRequest = { params in
+            if !scheduled.value {
+                scheduled.value = true
+                try? box.runner?.compactBeforeNextTurn()
+            }
+            return params
+        }
+
+        let final = try await runner.run()
+
+        XCTAssertEqual(final.id, "msg_1", "run() returns the answer, not the compaction")
+        let compaction = try request(1, of: responder)
+        XCTAssertEqual(messages(of: compaction).map { $0["role"] as? String }, ["user", "assistant"], "the final turn is summarized too")
+        XCTAssertEqual(runner.messages.count, 1)
+        guard case .compaction? = runner.messages.first?.content.first else { return XCTFail("history is not the compaction") }
+    }
+
+    func testPendingCompactionIsDroppedWhenTheFinalTurnEndedWithUnansweredToolCalls() async throws {
+        let box = RunnerBox()
+        let scheduled = Flag()
+        let responder = SequencedResponder([
+            // Cut off mid tool call: it is never run, and the API can't compact a conversation that ends so.
+            Self.messageFixture(id: "msg_1", content: Self.toolUse("toolu_1", "starter"), stopReason: "max_tokens"),
+        ])
+        let runner = makeRunner(responder: responder, params: baseParams, tools: [])
+        box.runner = runner
+        runner.beforeRequest = { params in
+            if !scheduled.value {
+                scheduled.value = true
+                try? box.runner?.compactBeforeNextTurn()
+            }
+            return params
+        }
+
+        let final = try await runner.run()
+
+        XCTAssertEqual(final.id, "msg_1")
+        XCTAssertEqual(responder.requestBodies.count, 1, "no compaction request")
+        XCTAssertEqual(runner.messages.count, 1, "the conversation is as it was")
+    }
+
+    func testCompactionWaitsForAPausedTurnToBeResumed() async throws {
+        let box = RunnerBox()
+        let scheduled = Flag()
+        let responder = SequencedResponder([
+            Self.messageFixture(id: "msg_1", content: Self.endTurnContent, stopReason: "pause_turn"),
+            Self.messageFixture(id: "msg_2", content: Self.endTurnContent, stopReason: "end_turn"),
+            Self.messageFixture(id: "msg_c", content: Self.compactionContent, stopReason: "compaction"),
+        ])
+        let runner = makeRunner(responder: responder, params: baseParams, tools: [])
+        box.runner = runner
+        runner.onAppendMessages = { _ in
+            guard !scheduled.value else { return }
+            scheduled.value = true
+            try? box.runner?.compactBeforeNextTurn()
+        }
+
+        let final = try await runner.run()
+
+        XCTAssertEqual(final.id, "msg_2")
+        XCTAssertNil(try request(1, of: responder)["compaction"], "the API can't compact a turn that ends mid-way")
+        XCTAssertNotNil(try request(2, of: responder)["compaction"])
+        XCTAssertEqual(messages(of: try request(2, of: responder)).count, 3)
+    }
+
+    func testACompactionWithoutASummaryLeavesTheConversationAlone() async throws {
+        let box = RunnerBox()
+        let scheduled = Flag()
+        let compacted = IDLog()
+        let starter = AnyAnthropicTool(ClosureTool(name: "starter") { _, _ in .text("ok") })
+        let responder = SequencedResponder([
+            Self.messageFixture(id: "msg_1", content: Self.toolUse("toolu_1", "starter"), stopReason: "tool_use"),
+            Self.messageFixture(id: "msg_c", content: #"[{"type": "compaction", "content": null}]"#, stopReason: "compaction"),
+            Self.messageFixture(id: "msg_3", content: Self.endTurnContent, stopReason: "end_turn"),
+        ])
+        let runner = makeRunner(responder: responder, params: baseParams, tools: [starter])
+        box.runner = runner
+        runner.onAppendMessages = { _ in
+            guard !scheduled.value else { return }
+            scheduled.value = true
+            try? box.runner?.compactBeforeNextTurn()
+        }
+        runner.onCompaction = { compacted.add($0.id) }
+
+        let final = try await runner.run()
+
+        XCTAssertEqual(final.id, "msg_3")
+        XCTAssertEqual(compacted.ids, [])
+        XCTAssertEqual(messages(of: try request(2, of: responder)).count, 3, "user, assistant, tool result: all still there")
+    }
+
+    func testToolsWithdrawnBeforeACompactionStayWithdrawnAfterIt() async throws {
+        let box = RunnerBox()
+        let scheduled = Flag()
+        let echoWasCalled = Flag()
+        let echo = AnyAnthropicTool(ClosureTool(name: "echo") { _, _ in
+            echoWasCalled.value = true
+            return .text("should never run")
+        })
+        let starter = AnyAnthropicTool(ClosureTool(name: "starter") { _, _ in .text("ok") })
+        let responder = SequencedResponder([
+            Self.messageFixture(id: "msg_1", content: Self.toolUse("toolu_1", "starter"), stopReason: "tool_use"),
+            Self.messageFixture(id: "msg_c", content: Self.compactionContent, stopReason: "compaction"),
+            Self.messageFixture(id: "msg_3", content: Self.toolUse("toolu_3", "echo"), stopReason: "tool_use"),
+            Self.messageFixture(id: "msg_4", content: Self.endTurnContent, stopReason: "end_turn"),
+        ])
+        // The history withdraws `echo`, and that history is what the compaction is about to replace.
+        let withdrawn = BetaMessageParam(
+            role: .system,
+            content: [.toolRemoval(BetaRequestToolRemovalBlockParam(tool: .tool(BetaToolChangeToolReferenceParam(name: "echo"))))]
+        )
+        let params = BetaMessageCreateParams(model: "claude-opus-5", maxTokens: 256, messages: [withdrawn, .user("Hi")])
+        let runner = makeRunner(responder: responder, params: params, tools: [starter, echo])
+        box.runner = runner
+        runner.onAppendMessages = { _ in
+            guard !scheduled.value else { return }
+            scheduled.value = true
+            try? box.runner?.compactBeforeNextTurn()
+        }
+
+        _ = try await runner.run()
+
+        XCTAssertFalse(echoWasCalled.value, "the summary replaced the removal block, not the removal")
+        let result = try XCTUnwrap((messages(of: try request(3, of: responder)).last?["content"] as? [[String: Any]])?.first)
+        XCTAssertEqual(result["content"] as? String, "Error: Tool 'echo' not found")
+    }
+
+    func testCompactionIsRefusedWhileContextManagementHasACompactionEdit() async throws {
+        let responder = SequencedResponder([])
+        let params = compactionParams(
+            contextManagement: .object(["edits": .array([.object(["type": .string("compact_20260904")])])])
+        )
+        let runner = makeRunner(responder: responder, params: params, tools: [])
+
+        XCTAssertThrowsError(try runner.compactBeforeNextTurn()) { error in
+            guard case AnthropicError.invalidArgument(let message) = error else {
+                return XCTFail("expected .invalidArgument, got \(error)")
+            }
+            XCTAssertTrue(message.contains("context_management"), message)
+        }
+    }
+
+    func testACompactionParamOnTheRunnerIsRefusedBeforeAnyRequest() async throws {
+        let responder = SequencedResponder([])
+        let params = BetaMessageCreateParams(
+            model: "claude-opus-5", maxTokens: 256, messages: [.user("Hi")], compaction: BetaCompactionConfigParam()
+        )
+        let runner = makeRunner(responder: responder, params: params, tools: [])
+
+        do {
+            _ = try await runner.run()
+            XCTFail("every request in the loop would compact again")
+        } catch AnthropicError.invalidArgument(let message) {
+            XCTAssertTrue(message.contains("compactBeforeNextTurn"), message)
+        }
+        XCTAssertEqual(responder.requestBodies.count, 0)
     }
 
     func testNoToolUseBlocksStopsAfterOneIteration() async throws {
