@@ -42,6 +42,12 @@ import Anthropic
 ///   compaction request, and the signed `compaction` block that comes back replaces the history.
 ///   Requires the `compact-2026-09-04` beta.
 ///
+/// With `runToolsEagerly` the runner streams each reply and starts a tool as soon as the model has moved
+/// on from its call, instead of once the reply ends. This is optimistic: a reply that is interrupted or
+/// changes course (it hits `max_tokens`, pauses, is refused) may have started tools whose results are
+/// then not used, so `deferToolCall` can hold the calls that must not run unless the turn goes on to run
+/// its tools. The calls run concurrently with each other and with the rest of the reply.
+///
 /// Out of scope: Python's `@beta_tool` decorator/reflection-based schema derivation -- Swift has no
 /// runtime reflection over function parameters, so (like GA's `ToolRunner`) callers always supply an
 /// explicit `AnthropicTool`.
@@ -55,6 +61,9 @@ public final class BetaToolRunner {
     private let userProfileId: String?
     private let options: RequestOptions
     private let maxIterations: Int?
+    private let runToolsEagerly: Bool
+    private let deferToolCall: (@Sendable (ToolUseBlock) -> Bool)?
+    private let eagerCalls = BetaEagerToolCalls()
 
     private var params: BetaMessageCreateParams
     private var lastMessage: BetaMessage?
@@ -86,10 +95,14 @@ public final class BetaToolRunner {
         betas: [String] = [],
         userProfileId: String? = nil,
         options: RequestOptions = RequestOptions(),
-        maxIterations: Int? = nil
+        maxIterations: Int? = nil,
+        runToolsEagerly: Bool = false,
+        deferToolCall: (@Sendable (ToolUseBlock) -> Bool)? = nil
     ) {
         self.client = client
         self.registry = BetaToolRegistry(tools: tools)
+        self.runToolsEagerly = runToolsEagerly
+        self.deferToolCall = deferToolCall
         self.betas = betas
         self.userProfileId = userProfileId
         self.options = options
@@ -153,6 +166,8 @@ public final class BetaToolRunner {
                     + "again. Call `compactBeforeNextTurn()` when the conversation should be compacted instead."
             )
         }
+        // Whatever is still running when the run ends abnormally is cancelled; a normal exit has awaited it.
+        defer { eagerCalls.cancelAll() }
         var iterations = 0
         var lastStopReason: BetaStopReason?
         while maxIterations.map({ iterations < $0 }) ?? true {
@@ -173,14 +188,17 @@ public final class BetaToolRunner {
             if let beforeRequest {
                 requestParams = beforeRequest(requestParams)
             }
-            let message = try await client.beta.messages.create(
-                requestParams, betas: betas, userProfileId: userProfileId, options: options
-            )
+            let message = try await sendTurn(requestParams)
             lastMessage = message
             lastStopReason = message.stopReason
             propagateContainer(from: message)
 
             let step = Self.step(after: message.stopReason)
+            if step != .runTools {
+                // Calls started while the reply streamed are finished, not abandoned, even though this turn
+                // goes on to run no tools.
+                await eagerCalls.settle()
+            }
             if step == .stop {
                 try await compactAfterFinalTurn(message)
                 break
@@ -203,7 +221,7 @@ public final class BetaToolRunner {
 
             let history = params.messages
             let registry = self.registry
-            let toolResults = await Self.executeToolUseBlocks(toolUseBlocks) { name in
+            let toolResults = await Self.executeToolUseBlocks(toolUseBlocks, started: eagerCalls.started()) { name in
                 registry.tool(named: name, history: history)
             }
             var toolResultMessage = BetaMessageParam(
@@ -228,6 +246,51 @@ public final class BetaToolRunner {
         return lastMessage
     }
 
+    // MARK: - Sending
+
+    /// One request that returns a whole message: a plain call, or, with `runToolsEagerly`, a streamed one.
+    private func send(_ requestParams: BetaMessageCreateParams) async throws -> BetaMessage {
+        guard runToolsEagerly else {
+            return try await client.beta.messages.create(
+                requestParams, betas: betas, userProfileId: userProfileId, options: options
+            )
+        }
+        let stream = try await client.beta.messages.stream(
+            requestParams, betas: betas, userProfileId: userProfileId, options: options
+        )
+        return try await stream.finalMessage()
+    }
+
+    /// A turn's request. With `runToolsEagerly` the reply is streamed and each tool call starts as soon as
+    /// the model has moved on from it.
+    private func sendTurn(_ requestParams: BetaMessageCreateParams) async throws -> BetaMessage {
+        eagerCalls.reset()
+        guard runToolsEagerly else { return try await send(requestParams) }
+
+        let stream = try await client.beta.messages.stream(
+            requestParams, betas: betas, userProfileId: userProfileId, options: options
+        )
+        let history = params.messages
+        let registry = self.registry
+        let eagerCalls = self.eagerCalls
+        var tracker = BetaEagerCallTracker()
+        do {
+            for try await event in await stream.events {
+                guard let call = tracker.track(event) else { continue }
+                if deferToolCall?(call) == true { continue }
+                // A call to a tool the runner doesn't have gets its error result with the tool response.
+                guard registry.tool(named: call.name, history: history) != nil else { continue }
+                eagerCalls.start(call) {
+                    await Self.executeSingle(call) { registry.tool(named: $0, history: history) }
+                }
+            }
+            return try await stream.finalMessage()
+        } catch {
+            eagerCalls.cancelAll()
+            throw error
+        }
+    }
+
     // MARK: - Compaction
 
     private static func requireNoCompactionEdit(in params: BetaMessageCreateParams) throws {
@@ -242,9 +305,7 @@ public final class BetaToolRunner {
     /// Not counted as an iteration.
     private func compact(_ compaction: BetaCompactionConfigParam) async throws {
         try Self.requireNoCompactionEdit(in: params)
-        let message = try await client.beta.messages.create(
-            params.forCompactionRequest(compaction), betas: betas, userProfileId: userProfileId, options: options
-        )
+        let message = try await send(params.forCompactionRequest(compaction))
         // Summary or not, the request went out with any edit made before it. Without a summary there is
         // nothing to replace the conversation with, so it carries on as it was.
         guard message.content.contains(where: { block in
@@ -303,13 +364,21 @@ public final class BetaToolRunner {
         }
     }
 
+    /// Runs the turn's calls concurrently. A call that was already started while the reply streamed is
+    /// not run again: its result is awaited instead.
     private static func executeToolUseBlocks(
         _ blocks: [ToolUseBlock],
+        started: [String: Task<ToolResultBlockParam, Never>],
         resolve: @escaping @Sendable (String) -> AnyAnthropicTool?
     ) async -> [ToolResultBlockParam] {
         await withTaskGroup(of: (Int, ToolResultBlockParam).self) { group in
             for (index, block) in blocks.enumerated() {
-                group.addTask { (index, await executeSingle(block, resolve: resolve)) }
+                group.addTask {
+                    if let task = started[block.id] {
+                        return (index, await task.value)
+                    }
+                    return (index, await executeSingle(block, resolve: resolve))
+                }
             }
             var byIndex: [Int: ToolResultBlockParam] = [:]
             for await (index, result) in group {
