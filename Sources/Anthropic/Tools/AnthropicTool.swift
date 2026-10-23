@@ -95,3 +95,22 @@ public struct AnyAnthropicTool: Sendable {
         ToolParam(name: name, inputSchema: inputSchema, description: description)
     }
 }
+
+extension ToolUnionParam {
+    /// The `tools` entry that declares `tool` to the model, so a tool defined once for ``ToolRunner``
+    /// can also go straight into a request you send yourself -- `messages.create`, `stream` or
+    /// `countTokens` -- without restating its name, description and schema:
+    ///
+    /// ```swift
+    /// MessageCreateParams(model: model, maxTokens: 256, messages: [.user("Hi")], tools: [ToolUnionParam(weather)])
+    /// ```
+    ///
+    /// Only the declaration is sent; running the tool stays your job (or the runner's).
+    public init(_ tool: some AnthropicTool) {
+        self.init(AnyAnthropicTool(tool))
+    }
+
+    public init(_ tool: AnyAnthropicTool) {
+        self = .custom(tool.toolParam)
+    }
+}
