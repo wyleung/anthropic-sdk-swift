@@ -21,3 +21,21 @@ See the maintainer's roadmap for the current phase and what's intentionally defe
 swift build
 swift test
 ```
+
+CI runs `swift test --enable-code-coverage`; run that before you push, since the instrumentation slows execution and
+can expose races a plain `swift test` hides.
+
+### Tests against the real API
+
+`LiveAPITests` and `BetaLiveAPITests` check what mocks cannot: that the server accepts what this SDK sends. They
+**skip by default** and spend tokens when enabled, so they need both switches:
+
+```
+ANTHROPIC_LIVE_TESTS=1 ANTHROPIC_API_KEY=sk-ant-... swift test --filter LiveAPITests
+```
+
+`ANTHROPIC_LIVE_MODEL` overrides the model (default `claude-haiku-5-5`) and `ANTHROPIC_BASE_URL` the endpoint. With
+`ANTHROPIC_LIVE_TESTS=1` but no key, only the invalid-key check runs; it sends a made-up key and spends nothing. The
+Beta tests for inline tools, compaction and system-message fields skip, with the server's message, when an account
+doesn't have that beta.
+
