@@ -79,6 +79,15 @@ private final class SequencedResponder {
     }
 }
 
+/// Records the size of every batch passed to `onAppendMessages`.
+private final class BatchLog: @unchecked Sendable {
+    private(set) var counts: [Int] = []
+
+    func add(_ count: Int) {
+        counts.append(count)
+    }
+}
+
 final class BetaToolRunnerTests: XCTestCase {
     override func tearDown() {
         MockURLProtocol.responder = nil
@@ -176,6 +185,80 @@ final class BetaToolRunnerTests: XCTestCase {
         XCTAssertEqual(finalMessage.stopReason, .refusal)
         XCTAssertFalse(toolWasCalled.value)
         XCTAssertEqual(responder.requestBodies.count, 1)
+    }
+
+    /// Only `tool_use` runs tools. Every other finished turn stops with its `tool_use` blocks unrun: a
+    /// `max_tokens` turn can end in a truncated call, and none of the others asked for a result.
+    func testOnlyAToolUseTurnRunsToolsEveryOtherStopReasonStopsWithoutRunningThem() async throws {
+        for stopReason in ["end_turn", "max_tokens", "stop_sequence", "model_context_window_exceeded", "refusal", "a_reason_from_the_future"] {
+            let responder = SequencedResponder([
+                Self.messageFixture(
+                    id: "msg_1",
+                    content: #"[{"type": "tool_use", "id": "toolu_1", "name": "echo", "input": {}}]"#,
+                    stopReason: stopReason
+                ),
+            ])
+            let toolWasCalled = Flag()
+            let tool = AnyAnthropicTool(ClosureTool(name: "echo") { _, _ in
+                toolWasCalled.value = true
+                return .text("should never run")
+            })
+
+            let finalMessage = try await makeRunner(responder: responder, tools: [tool]).run()
+
+            XCTAssertEqual(finalMessage.id, "msg_1", stopReason)
+            XCTAssertFalse(toolWasCalled.value, "\(stopReason) must not run the tool")
+            XCTAssertEqual(responder.requestBodies.count, 1, stopReason)
+        }
+    }
+
+    /// `pause_turn` (a server tool hit its iteration limit) and `compaction` (compaction handed the turn
+    /// back before the model answered) are unfinished turns: the server expects them back unchanged to
+    /// carry on. The runner used to end the run at both.
+    func testPausedAndCompactionTurnsAreSentBackUnchangedAndTheRunContinues() async throws {
+        for stopReason in ["pause_turn", "compaction"] {
+            let first = #"[{"type": "server_tool_use", "id": "srvtoolu_1", "name": "web_search", "input": {"query": "x"}}]"#
+            let responder = SequencedResponder([
+                Self.messageFixture(id: "msg_1", content: first, stopReason: stopReason),
+                Self.messageFixture(id: "msg_2", content: #"[{"type": "text", "text": "Done!"}]"#, stopReason: "end_turn"),
+            ])
+            let appended = BatchLog()
+            let runner = makeRunner(responder: responder, tools: [])
+            runner.onAppendMessages = { appended.add($0.count) }
+
+            let finalMessage = try await runner.run()
+
+            XCTAssertEqual(finalMessage.id, "msg_2", stopReason)
+            XCTAssertEqual(responder.requestBodies.count, 2, stopReason)
+            let second = try XCTUnwrap(responder.requestBodies.dropFirst().first, "\(stopReason) must be sent back")
+            let messages = try XCTUnwrap(second["messages"] as? [[String: Any]])
+            XCTAssertEqual(messages.count, 2, "\(stopReason): the user turn, then the unfinished turn, nothing after it")
+            XCTAssertEqual(messages.last?["role"] as? String, "assistant", stopReason)
+            let content = try XCTUnwrap(messages.last?["content"] as? [[String: Any]])
+            XCTAssertEqual(content.first?["id"] as? String, "srvtoolu_1", stopReason)
+            XCTAssertEqual(appended.counts, [1], "\(stopReason): only the assistant turn, no tool results")
+        }
+    }
+
+    func testPauseTurnRunsNoToolsEvenWhenItCarriesAToolUseBlock() async throws {
+        let responder = SequencedResponder([
+            Self.messageFixture(
+                id: "msg_1",
+                content: #"[{"type": "tool_use", "id": "toolu_1", "name": "echo", "input": {}}]"#,
+                stopReason: "pause_turn"
+            ),
+            Self.messageFixture(id: "msg_2", content: #"[{"type": "text", "text": "Done!"}]"#, stopReason: "end_turn"),
+        ])
+        let toolWasCalled = Flag()
+        let tool = AnyAnthropicTool(ClosureTool(name: "echo") { _, _ in
+            toolWasCalled.value = true
+            return .text("should never run")
+        })
+
+        let finalMessage = try await makeRunner(responder: responder, tools: [tool]).run()
+
+        XCTAssertEqual(finalMessage.id, "msg_2")
+        XCTAssertFalse(toolWasCalled.value)
     }
 
     func testNoToolUseBlocksStopsAfterOneIteration() async throws {

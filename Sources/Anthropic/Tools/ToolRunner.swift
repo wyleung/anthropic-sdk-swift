@@ -4,14 +4,18 @@ import Foundation
 /// so callers don't have to hand-write the `while` loop themselves. Mirrors the language-independent
 /// loop shared by the Python (`BetaToolRunner`) and TypeScript (`BetaToolRunner`) reference SDKs:
 ///
-/// - Call `messages.create`.
-/// - Stop immediately on `stop_reason == "refusal"` without executing any `tool_use` blocks from
-///   that turn -- the model never confirmed the side effects, and the results couldn't be replayed
-///   coherently afterward.
-/// - Stop if the turn has no `tool_use` blocks.
-/// - Otherwise execute every `tool_use` block concurrently (a `TaskGroup`, matching the TS runner's
-///   `Promise.all`) and batch all resulting `tool_result` blocks into one `{role: "user", ...}`
-///   message, in original `tool_use` order, before looping.
+/// - Call `messages.create`, then decide what to do from the turn's `stop_reason`, as the reference
+///   runners do (``Step``):
+///   - `tool_use`: execute every `tool_use` block concurrently (a `TaskGroup`, matching the TS
+///     runner's `Promise.all`) and batch all resulting `tool_result` blocks into one
+///     `{role: "user", ...}` message, in original `tool_use` order, before looping. Stop if the turn
+///     has no `tool_use` blocks.
+///   - `pause_turn`: the turn is unfinished (a server tool hit its iteration limit). Send it back
+///     unchanged, running no tools, so the server continues it.
+///   - anything else -- `end_turn`, `max_tokens`, `stop_sequence`, `model_context_window_exceeded`,
+///     `refusal`, or a value this SDK doesn't know -- stop **without executing any `tool_use` block**
+///     from that turn. A `max_tokens` turn can end in a truncated tool call, and a refusal means the
+///     model never confirmed the side effects; neither can be replayed coherently afterward.
 ///
 /// Not `Sendable` and not safe to `run()` concurrently from multiple tasks -- like both reference
 /// SDKs' runner classes, one `ToolRunner` drives one linear conversation.
@@ -62,8 +66,15 @@ public final class ToolRunner {
             let message = try await client.messages.create(requestParams, options: options)
             lastMessage = message
 
-            if message.stopReason == .refusal {
+            let step = Self.step(after: message.stopReason)
+            if step == .stop {
                 break
+            }
+            let assistantMessage = try message.asRequestParam()
+            if step == .resume {
+                params = params.with(messages: params.messages + [assistantMessage])
+                onAppendMessages?([assistantMessage])
+                continue
             }
 
             let toolUseBlocks = message.content.compactMap { block -> ToolUseBlock? in
@@ -71,8 +82,6 @@ public final class ToolRunner {
                 return nil
             }
             guard !toolUseBlocks.isEmpty else { break }
-
-            let assistantMessage = try message.asRequestParam()
 
             let toolResults = await Self.executeToolUseBlocks(toolUseBlocks, toolsByName: toolsByName)
             var toolResultMessage = MessageParam(
@@ -95,6 +104,21 @@ public final class ToolRunner {
             )
         }
         return lastMessage
+    }
+
+    /// What the loop does with a finished turn.
+    enum Step: Equatable {
+        case runTools, resume, stop
+    }
+
+    /// Every stop reason maps to exactly one step. `nil` and values this SDK doesn't know yet end the
+    /// loop like any other finished turn rather than throwing.
+    static func step(after stopReason: StopReason?) -> Step {
+        switch stopReason {
+        case .toolUse: return .runTools
+        case .pauseTurn: return .resume
+        case .endTurn, .maxTokens, .stopSequence, .refusal, .modelContextWindowExceeded, .unknown, nil: return .stop
+        }
     }
 
     private static func executeToolUseBlocks(
