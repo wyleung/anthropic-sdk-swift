@@ -168,26 +168,33 @@ package struct HTTPTransport: Sendable {
         request.httpBody = httpBody
         request.timeoutInterval = options.timeout ?? client.timeout
 
-        var headers = client.defaultHeaders
+        var headers = RequestHeaders()
+        for (key, value) in client.defaultHeaders {
+            headers.set(key, value)
+        }
         let (headerName, headerValue) = try await client.authProvider.authHeader()
-        headers[headerName] = headerValue
+        headers.set(headerName, headerValue)
+        // A provider's `anthropic-beta` flag (the OAuth marker) is merged in after the call's own
+        // headers below, not layered like the rest: the two are lists that must be unioned.
+        var providerBetaFlags: String?
         for (key, value) in try await client.authProvider.extraHeaders() {
-            headers[key] = value
-        }
-        if let contentType {
-            headers["content-type"] = contentType
-        }
-        if let accept {
-            headers["accept"] = accept
-        }
-        for (key, value) in options.headers {
-            if let value {
-                headers[key] = value
+            if key.lowercased() == "anthropic-beta" {
+                providerBetaFlags = value
             } else {
-                headers.removeValue(forKey: key)
+                headers.set(key, value)
             }
         }
-        for (key, value) in headers {
+        if let contentType {
+            headers.set("content-type", contentType)
+        }
+        if let accept {
+            headers.set("accept", accept)
+        }
+        headers.apply(options.headers)
+        if let providerBetaFlags {
+            headers.mergeBetaFlags(providerBetaFlags)
+        }
+        for (key, value) in headers.all {
             request.setValue(value, forHTTPHeaderField: key)
         }
         return request

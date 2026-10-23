@@ -10,22 +10,24 @@ struct CredentialResolution: Sendable {
     let baseURL: URL?
 }
 
-/// Implements the reference SDKs' full credential-resolution precedence (`_client.py`'s
-/// `_resolve_credentials` / `credential-chain.ts`), in order, first match wins:
+/// Implements the reference SDKs' credential-resolution precedence (Python's `_client.py` /
+/// `default_credentials`, TypeScript's `credential-chain.ts`), first match wins:
 ///
-/// 1. An explicit `authProvider` passed to the client constructor.
-/// 2. An explicit `apiKey` passed to the client constructor.
-/// 3. `ANTHROPIC_API_KEY`, then `ANTHROPIC_AUTH_TOKEN` -- only when no `profile` was requested.
-/// 4. Explicit profile selection (`profile` param, or `ANTHROPIC_PROFILE`/`ANTHROPIC_CONFIG_DIR` env,
-///    or a non-empty `active_config` pointer file). Failures here are hard errors -- the caller asked
-///    for a specific profile, so a broken one should not be silently skipped.
-/// 5. Workload Identity Federation via pure env vars (`ANTHROPIC_FEDERATION_RULE_ID` +
-///    `ANTHROPIC_ORGANIZATION_ID` + an identity token source) -- bypasses config files entirely.
-/// 6. A fallback attempt to load whatever the *passively discovered* active profile would be (i.e.
-///    `"default"` when nothing points elsewhere). Both the profile-name resolution and the load are
-///    `try?` -- this step is a best-effort convenience, not a request the caller made explicitly, so
-///    its failures are swallowed rather than raised.
-/// 7. Nothing matched: throw a generic "could not resolve credentials" error.
+/// 1. An explicit argument: `authProvider`, `apiKey` or `profile`. **At most one** may be passed
+///    (otherwise ``AnthropicError/invalidArgument(message:)``), and when one is the environment is not
+///    consulted for credentials. An explicit profile that cannot be loaded is a hard error.
+/// 2. `ANTHROPIC_API_KEY`, then `ANTHROPIC_AUTH_TOKEN`.
+/// 3. `ANTHROPIC_PROFILE`: load the profile it names. A broken one is a hard error -- the caller asked
+///    for it by name.
+/// 4. Workload Identity Federation via pure env vars (`ANTHROPIC_FEDERATION_RULE_ID` +
+///    `ANTHROPIC_ORGANIZATION_ID` + an identity token source) -- bypasses config files entirely, and
+///    ranks above the active profile so a machine with WIF wired up is not hijacked by a leftover
+///    profile on disk.
+/// 5. The active profile: the one `active_config` points at, otherwise `default`.
+///    `ANTHROPIC_CONFIG_DIR` says where profiles are looked up and selects none. If the user set it or
+///    wrote the `active_config` pointer, a broken profile is a hard error; a profile found only by
+///    passive discovery is best-effort, and its failures are swallowed.
+/// 6. Nothing matched: throw ``AnthropicError/credentials(message:)``.
 enum CredentialChain {
     static func resolve(
         apiKey: String?,
@@ -36,27 +38,32 @@ enum CredentialChain {
         urlSession: URLSession,
         identityTokenSource: (any IdentityTokenSource)? = nil
     ) async throws -> CredentialResolution {
+        try requireAtMostOneExplicitCredential(apiKey: apiKey, authProvider: authProvider, profile: profile)
+
         if let authProvider {
             return CredentialResolution(provider: authProvider, baseURL: nil)
         }
         if let apiKey {
             return CredentialResolution(provider: APIKeyProvider(apiKey: apiKey), baseURL: nil)
         }
-        if profile == nil {
-            if let envKey = nonEmpty(environment["ANTHROPIC_API_KEY"]) {
-                return CredentialResolution(provider: APIKeyProvider(apiKey: envKey), baseURL: nil)
-            }
-            if let envToken = nonEmpty(environment["ANTHROPIC_AUTH_TOKEN"]) {
-                return CredentialResolution(provider: StaticTokenProvider(token: envToken), baseURL: nil)
-            }
+        if let profile {
+            return try await loadProfile(
+                try ProfilePaths.validateProfileName(profile), baseURL: baseURL, environment: environment,
+                urlSession: urlSession, identityTokenSourceOverride: identityTokenSource
+            )
         }
 
-        if profile != nil || ProfilePaths.hasExplicitActiveConfig(environment: environment) {
-            let profileName = try profile.map(ProfilePaths.validateProfileName)
-                ?? (try ProfilePaths.activeProfile(environment: environment))
+        if let envKey = nonEmpty(environment["ANTHROPIC_API_KEY"]) {
+            return CredentialResolution(provider: APIKeyProvider(apiKey: envKey), baseURL: nil)
+        }
+        if let envToken = nonEmpty(environment["ANTHROPIC_AUTH_TOKEN"]) {
+            return CredentialResolution(provider: StaticTokenProvider(token: envToken), baseURL: nil)
+        }
+
+        if let envProfile = nonEmpty(environment["ANTHROPIC_PROFILE"]) {
             return try await loadProfile(
-                profileName, baseURL: baseURL, environment: environment, urlSession: urlSession,
-                identityTokenSourceOverride: identityTokenSource
+                try ProfilePaths.validateProfileName(envProfile), baseURL: baseURL, environment: environment,
+                urlSession: urlSession, identityTokenSourceOverride: identityTokenSource
             )
         }
 
@@ -75,18 +82,39 @@ enum CredentialChain {
             return CredentialResolution(provider: provider, baseURL: nil)
         }
 
-        if let fallbackProfile = try? ProfilePaths.activeProfile(environment: environment),
+        if ProfilePaths.isActiveProfileUserConfigured(environment: environment) {
+            return try await loadProfile(
+                try ProfilePaths.activeProfile(environment: environment), baseURL: baseURL,
+                environment: environment, urlSession: urlSession, identityTokenSourceOverride: identityTokenSource
+            )
+        }
+        if let passiveProfile = try? ProfilePaths.activeProfile(environment: environment),
             let resolution = try? await loadProfile(
-                fallbackProfile, baseURL: baseURL, environment: environment, urlSession: urlSession,
+                passiveProfile, baseURL: baseURL, environment: environment, urlSession: urlSession,
                 identityTokenSourceOverride: identityTokenSource
             ) {
             return resolution
         }
 
-        throw AnthropicError.responseValidation(
-            message: "Could not resolve Anthropic credentials. Pass an apiKey/authProvider, set " +
-                "ANTHROPIC_API_KEY, or configure a profile under \(ProfilePaths.configDirectory(environment: environment).path).",
-            body: nil
+        throw AnthropicError.credentials(
+            message: "Could not resolve Anthropic credentials. Pass an apiKey/authProvider/profile, set " +
+                "ANTHROPIC_API_KEY, or configure a profile under \(ProfilePaths.configDirectory(environment: environment).path)."
+        )
+    }
+
+    /// A client has one credential. Passing two of `apiKey` / `authProvider` / `profile` used to be
+    /// resolved silently by precedence, which hid the mistake of leaving a stale one in place.
+    static func requireAtMostOneExplicitCredential(
+        apiKey: String?, authProvider: (any CredentialProvider)?, profile: String?
+    ) throws {
+        let passed = [
+            apiKey != nil ? "apiKey" : nil,
+            authProvider != nil ? "authProvider" : nil,
+            profile != nil ? "profile" : nil,
+        ].compactMap { $0 }
+        guard passed.count > 1 else { return }
+        throw AnthropicError.invalidArgument(
+            message: "Pass at most one of `apiKey`, `authProvider`, or `profile`. Received \(passed.joined(separator: ", "))."
         )
     }
 
@@ -98,8 +126,8 @@ enum CredentialChain {
         identityTokenSourceOverride: (any IdentityTokenSource)?
     ) async throws -> CredentialResolution {
         guard let config = try AnthropicConfigFile.load(profile: profileName, environment: environment) else {
-            throw AnthropicError.responseValidation(
-                message: "No config file found for profile \"\(profileName)\".", body: nil
+            throw AnthropicError.credentials(
+                message: "No config file found for profile \"\(profileName)\"."
             )
         }
         let resolvedBaseURL = effectiveBaseURL(baseURL, environment: environment, configBaseURL: config.baseURL)
@@ -110,20 +138,19 @@ enum CredentialChain {
             // `federation_rule_id`/`organization_id` are deliberately validated here, not at
             // config-load time -- a `user_oauth` profile never needs either field.
             guard let federationRuleId = nonEmpty(config.authentication.federationRuleId) else {
-                throw AnthropicError.responseValidation(
-                    message: "Profile \"\(profileName)\" is missing federation_rule_id for oidc_federation.",
-                    body: nil
+                throw AnthropicError.credentials(
+                    message: "Profile \"\(profileName)\" is missing federation_rule_id for oidc_federation."
                 )
             }
             guard let organizationId = nonEmpty(config.organizationId) else {
-                throw AnthropicError.responseValidation(
-                    message: "Profile \"\(profileName)\" is missing organization_id for oidc_federation.", body: nil
+                throw AnthropicError.credentials(
+                    message: "Profile \"\(profileName)\" is missing organization_id for oidc_federation."
                 )
             }
             guard let source = identityTokenSourceOverride
                 ?? config.authentication.identityToken.map({ FileIdentityTokenSource(path: $0.path) }) else {
-                throw AnthropicError.responseValidation(
-                    message: "Profile \"\(profileName)\" has no identity token source configured.", body: nil
+                throw AnthropicError.credentials(
+                    message: "Profile \"\(profileName)\" has no identity token source configured."
                 )
             }
             let provider = WorkloadIdentityCredentials(
@@ -139,8 +166,8 @@ enum CredentialChain {
 
         case .userOAuth:
             guard let clientId = nonEmpty(config.authentication.clientId) else {
-                throw AnthropicError.responseValidation(
-                    message: "Profile \"\(profileName)\" is missing client_id for user_oauth.", body: nil
+                throw AnthropicError.credentials(
+                    message: "Profile \"\(profileName)\" is missing client_id for user_oauth."
                 )
             }
             let provider = ProfileCredentialsProvider(
@@ -171,7 +198,7 @@ enum CredentialChain {
         if let path = nonEmpty(environment["ANTHROPIC_IDENTITY_TOKEN_FILE"]) {
             return FileIdentityTokenSource(path: path)
         }
-        if environment["ANTHROPIC_IDENTITY_TOKEN"] != nil {
+        if nonEmpty(environment["ANTHROPIC_IDENTITY_TOKEN"]) != nil {
             return EnvIdentityTokenSource(variableName: "ANTHROPIC_IDENTITY_TOKEN")
         }
         return nil

@@ -23,18 +23,18 @@ public struct FileIdentityTokenSource: IdentityTokenSource {
         do {
             data = try Data(contentsOf: URL(fileURLWithPath: path))
         } catch {
-            throw AnthropicError.responseValidation(
-                message: "Could not read identity token file at \(path): \(error.localizedDescription)", body: nil
+            throw AnthropicError.identityTokenFile(
+                message: "Could not read identity token file at \(path): \(error.localizedDescription)", path: path
             )
         }
         guard let text = String(data: data, encoding: .utf8) else {
-            throw AnthropicError.responseValidation(
-                message: "Identity token file at \(path) is not valid UTF-8.", body: nil
+            throw AnthropicError.identityTokenFile(
+                message: "Identity token file at \(path) is not valid UTF-8.", path: path
             )
         }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            throw AnthropicError.responseValidation(message: "Identity token file at \(path) is empty.", body: nil)
+            throw AnthropicError.identityTokenFile(message: "Identity token file at \(path) is empty.", path: path)
         }
         return trimmed
     }
@@ -48,9 +48,7 @@ struct EnvIdentityTokenSource: IdentityTokenSource {
 
     func token() async throws -> String {
         guard let value = ProcessInfo.processInfo.environment[variableName], !value.isEmpty else {
-            throw AnthropicError.responseValidation(
-                message: "Environment variable \(variableName) is not set.", body: nil
-            )
+            throw AnthropicError.credentials(message: "Environment variable \(variableName) is not set.")
         }
         return value
     }

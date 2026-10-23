@@ -16,8 +16,13 @@ public final class AnthropicClient: Sendable {
 
     /// - Parameters:
     ///   - apiKey: Falls back to the `ANTHROPIC_API_KEY`, then `ANTHROPIC_AUTH_TOKEN`, environment
-    ///     variables when omitted.
+    ///     variables when omitted (an empty variable counts as unset). If both are set the API key
+    ///     is used.
     ///   - authProvider: Supply this instead of `apiKey` for non-API-key auth (added in Phase 5).
+    ///
+    /// A client has one credential: pass `apiKey` *or* `authProvider`, not both. Because this
+    /// initializer never throws, passing both is reported by the first request as
+    /// ``AnthropicError/invalidArgument(message:)`` instead.
     ///
     /// This initializer never touches disk and never throws -- it only covers the two simplest
     /// credential sources (an explicit value, or one of two environment variables). For on-disk
@@ -31,14 +36,25 @@ public final class AnthropicClient: Sendable {
         urlSession: URLSession = .shared
     ) {
         let environment = ProcessInfo.processInfo.environment
-        let resolvedKey = apiKey ?? environment["ANTHROPIC_API_KEY"]
-        let resolvedAuthToken = environment["ANTHROPIC_AUTH_TOKEN"]
+        // Explicit arguments are total: when one is passed the environment is not consulted. An empty
+        // variable is the same as an unset one (a defaulted-but-empty CI variable is common).
+        let hasExplicitCredential = apiKey != nil || authProvider != nil
+        func fromEnvironment(_ name: String) -> String? {
+            guard !hasExplicitCredential, let value = environment[name], !value.isEmpty else { return nil }
+            return value
+        }
+        let resolvedKey = apiKey ?? fromEnvironment("ANTHROPIC_API_KEY")
+        let resolvedAuthToken = fromEnvironment("ANTHROPIC_AUTH_TOKEN")
         self.baseURL = baseURL
         self.defaultHeaders = AnthropicClient.baseDefaultHeaders
         self.maxRetries = maxRetries
         self.timeout = timeout
         self.urlSession = urlSession
-        if let authProvider {
+        if apiKey != nil, authProvider != nil {
+            self.authProvider = RejectedCredentialsProvider(message:
+                "Pass at most one of `apiKey` or `authProvider`. Received apiKey, authProvider."
+            )
+        } else if let authProvider {
             self.authProvider = authProvider
         } else if let resolvedKey {
             self.authProvider = APIKeyProvider(apiKey: resolvedKey)
@@ -133,6 +149,18 @@ public final class AnthropicClient: Sendable {
             authProvider: authProvider
         )
     }
+}
+
+/// Stands in for the credential when the plain initializer is given an invalid combination. The
+/// initializer is documented as never throwing, so the failure surfaces on the first request instead.
+private struct RejectedCredentialsProvider: CredentialProvider {
+    let message: String
+
+    func authHeader() async throws -> (name: String, value: String) {
+        throw AnthropicError.invalidArgument(message: message)
+    }
+
+    func invalidate() async {}
 }
 
 /// Fallback `authProvider` when `AnthropicClient.init` finds no apiKey, authProvider, or credential

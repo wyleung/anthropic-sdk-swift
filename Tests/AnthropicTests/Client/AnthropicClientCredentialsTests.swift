@@ -56,4 +56,67 @@ final class AnthropicClientCredentialsTests: XCTestCase {
             XCTAssertTrue(detail.message.contains("apiKey"))
         }
     }
+
+    // MARK: - one credential per client
+
+    /// The `Authorization` header the client sends on one request (the response is a stub; only what
+    /// went out matters).
+    private func authorizationSent(by client: AnthropicClient) async -> String? {
+        var sent: String?
+        MockURLProtocol.responder = { request in
+            sent = request.value(forHTTPHeaderField: "authorization")
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["content-type": "application/json"]
+            )!
+            return (response, Data("{}".utf8))
+        }
+        _ = try? await client.models.retrieve("claude-opus-5")
+        return sent
+    }
+
+    func testPassingBothAnApiKeyAndAnAuthProviderIsRefusedOnTheFirstRequest() async throws {
+        MockURLProtocol.responder = { _ in
+            XCTFail("a conflicting credential must never reach the network")
+            throw URLError(.unknown)
+        }
+        let client = AnthropicClient(
+            apiKey: "key", authProvider: StaticTokenProvider(token: "token"), urlSession: MockURLProtocol.makeSession()
+        )
+
+        do {
+            _ = try await client.models.retrieve("claude-opus-5")
+            XCTFail("expected the conflicting credentials to be refused")
+        } catch AnthropicError.invalidArgument(let message) {
+            XCTAssertTrue(message.contains("at most one"), message)
+            XCTAssertTrue(message.contains("apiKey") && message.contains("authProvider"), message)
+        }
+    }
+
+    func testAnEmptyEnvironmentVariableIsTreatedAsUnset() async {
+        setenv("ANTHROPIC_API_KEY", "", 1)
+        setenv("ANTHROPIC_AUTH_TOKEN", "env-token", 1)
+
+        let sent = await authorizationSent(by: AnthropicClient(urlSession: MockURLProtocol.makeSession()))
+
+        XCTAssertEqual(sent, "Bearer env-token", "an empty API key must not shadow the auth token")
+    }
+
+    func testTheApiKeyIsUsedWhenBothEnvironmentVariablesAreSet() async {
+        setenv("ANTHROPIC_API_KEY", "env-key", 1)
+        setenv("ANTHROPIC_AUTH_TOKEN", "env-token", 1)
+
+        let sent = await authorizationSent(by: AnthropicClient(urlSession: MockURLProtocol.makeSession()))
+
+        XCTAssertEqual(sent, "Bearer env-key")
+    }
+
+    func testAnExplicitCredentialMeansTheEnvironmentIsNotConsulted() async {
+        setenv("ANTHROPIC_API_KEY", "env-key", 1)
+
+        let sent = await authorizationSent(
+            by: AnthropicClient(authProvider: StaticTokenProvider(token: "explicit"), urlSession: MockURLProtocol.makeSession())
+        )
+
+        XCTAssertEqual(sent, "Bearer explicit")
+    }
 }

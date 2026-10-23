@@ -23,10 +23,16 @@ actor TokenCache {
     private var cached: AccessToken?
     private var pendingRefresh: Task<AccessToken, Error>?
     private var lastAdvisoryFailureTime: Date?
+    /// Set by `invalidate()`, cleared once a forced refresh succeeds (so a failed one still forces the
+    /// next). While it is set, an *unforced* refresh that was already in flight when the token was
+    /// invalidated must not be cached: it may have returned the very token that was rejected.
+    private var forceNextRefresh = false
 
-    /// Drops the cached token so the next call performs a fresh (mandatory-window) refresh.
+    /// Drops the cached token so the next call performs a fresh (mandatory-window) refresh, and marks
+    /// that refresh as forced so an on-disk provider re-checks instead of re-serving the rejected token.
     func invalidate() {
         cached = nil
+        forceNextRefresh = true
     }
 
     /// Returns a usable access token, per the freshness policy above. `provider` is called with
@@ -69,11 +75,11 @@ actor TokenCache {
     private func beginRefresh(
         provider: @escaping @Sendable (Bool) async throws -> AccessToken, isAdvisory: Bool
     ) -> Task<AccessToken, Error> {
-        let hasCached = cached != nil
+        let force = cached == nil || forceNextRefresh
         let task = Task {
             do {
-                let token = try await provider(!hasCached)
-                await self.completeRefresh(with: token)
+                let token = try await provider(force)
+                await self.completeRefresh(with: token, wasForced: force)
                 return token
             } catch {
                 await self.failRefresh(isAdvisory: isAdvisory)
@@ -84,8 +90,16 @@ actor TokenCache {
         return task
     }
 
-    private func completeRefresh(with token: AccessToken) {
-        cached = token
+    private func completeRefresh(with token: AccessToken, wasForced: Bool) {
+        // An unforced refresh that overlapped an `invalidate()` hands its token to the callers waiting on
+        // it but is not cached: the next caller then makes the forced call. (Mirrors upstream's
+        // `_end_refresh`.)
+        if wasForced || !forceNextRefresh {
+            cached = token
+        }
+        if wasForced {
+            forceNextRefresh = false
+        }
         pendingRefresh = nil
     }
 

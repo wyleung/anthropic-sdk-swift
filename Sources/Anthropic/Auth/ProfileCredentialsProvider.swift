@@ -53,8 +53,8 @@ final class ProfileCredentialsProvider: CredentialProvider {
 
     private func refreshOrLoad() async throws -> AccessToken {
         guard let stored = try CredentialsStore.read(profile: profile, environment: environment) else {
-            throw AnthropicError.responseValidation(
-                message: "No stored credentials found for profile \"\(profile)\".", body: nil
+            throw AnthropicError.credentials(
+                message: "No stored credentials found for profile \"\(profile)\"."
             )
         }
         if stored.expiresAt == nil || stored.expiresAt!.timeIntervalSinceNow > 30 {
@@ -64,9 +64,8 @@ final class ProfileCredentialsProvider: CredentialProvider {
         }
 
         guard let refreshToken = stored.refreshToken else {
-            throw AnthropicError.responseValidation(
-                message: "Stored credentials for profile \"\(profile)\" are expired and have no refresh_token.",
-                body: nil
+            throw AnthropicError.credentials(
+                message: "Stored credentials for profile \"\(profile)\" are expired and have no refresh_token."
             )
         }
         let refreshed = try await OAuthTokenEndpoint.exchangeRefreshToken(

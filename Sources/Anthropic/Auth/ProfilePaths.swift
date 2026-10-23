@@ -20,26 +20,26 @@ enum ProfilePaths {
     /// leading `.` (which also catches `..`), path separators, and NUL bytes.
     static func validateProfileName(_ name: String) throws -> String {
         guard !name.isEmpty else {
-            throw AnthropicError.responseValidation(message: "Profile name must not be empty.", body: nil)
+            throw AnthropicError.credentials(message: "Profile name must not be empty.")
         }
         guard name == name.trimmingCharacters(in: .whitespacesAndNewlines) else {
-            throw AnthropicError.responseValidation(
-                message: "Profile name \"\(name)\" must not have leading or trailing whitespace.", body: nil
+            throw AnthropicError.credentials(
+                message: "Profile name \"\(name)\" must not have leading or trailing whitespace."
             )
         }
         guard !name.hasPrefix(".") else {
-            throw AnthropicError.responseValidation(
-                message: "Profile name \"\(name)\" must not start with \".\".", body: nil
+            throw AnthropicError.credentials(
+                message: "Profile name \"\(name)\" must not start with \".\"."
             )
         }
         guard !name.contains("/"), !name.contains("\\") else {
-            throw AnthropicError.responseValidation(
-                message: "Profile name \"\(name)\" must not contain a path separator.", body: nil
+            throw AnthropicError.credentials(
+                message: "Profile name \"\(name)\" must not contain a path separator."
             )
         }
         guard !name.contains("\0") else {
-            throw AnthropicError.responseValidation(
-                message: "Profile name \"\(name)\" must not contain a NUL byte.", body: nil
+            throw AnthropicError.credentials(
+                message: "Profile name \"\(name)\" must not contain a NUL byte."
             )
         }
         return name
@@ -65,14 +65,14 @@ enum ProfilePaths {
         return trimmed.isEmpty ? nil : trimmed
     }
 
-    /// Whether *something* explicitly points at a profile (as opposed to a passively-discovered
-    /// `default` profile) -- used to decide whether a broken config should raise (explicit
-    /// selection) or be silently skipped (passive fallback).
-    static func hasExplicitActiveConfig(environment: [String: String]) -> Bool {
-        if let profile = environment["ANTHROPIC_PROFILE"], !profile.isEmpty { return true }
+    /// Whether the user said where profiles live (`ANTHROPIC_CONFIG_DIR`) or which one is active (a
+    /// non-empty `active_config` pointer file), as opposed to a `default` profile found only by
+    /// passive discovery. Neither *selects* a profile ahead of other credentials -- `ANTHROPIC_PROFILE`
+    /// does that -- but when resolution reaches the active profile, a broken one must then raise
+    /// instead of being skipped.
+    static func isActiveProfileUserConfigured(environment: [String: String]) -> Bool {
         if let configDir = environment["ANTHROPIC_CONFIG_DIR"], !configDir.isEmpty { return true }
-        if readActiveConfigPointer(environment: environment) != nil { return true }
-        return false
+        return readActiveConfigPointer(environment: environment) != nil
     }
 
     static func configFilePath(profile: String, environment: [String: String]) throws -> URL {
@@ -99,8 +99,8 @@ enum ProfilePaths {
         guard standardizedCandidate == standardizedBase
             || standardizedCandidate.hasPrefix(standardizedBase + "/")
         else {
-            throw AnthropicError.responseValidation(
-                message: "Resolved path escapes the Anthropic config directory.", body: nil
+            throw AnthropicError.credentials(
+                message: "Resolved path escapes the Anthropic config directory."
             )
         }
         return candidate
@@ -113,8 +113,8 @@ enum ProfilePaths {
         if urlString.hasPrefix("https://") { return }
         let allowedLoopbackPrefixes = ["http://localhost", "http://127.0.0.1", "http://[::1]"]
         if allowedLoopbackPrefixes.contains(where: { urlString.hasPrefix($0) }) { return }
-        throw AnthropicError.responseValidation(
-            message: "base_url \"\(urlString)\" must use https:// -- it may carry secret material.", body: nil
+        throw AnthropicError.credentials(
+            message: "base_url \"\(urlString)\" must use https:// -- it may carry secret material."
         )
     }
 }

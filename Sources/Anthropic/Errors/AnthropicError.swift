@@ -32,6 +32,26 @@ public enum AnthropicError: Error, Sendable {
     /// The caller passed something the SDK refuses to send -- e.g. an empty id for a path
     /// parameter. Thrown before any request is made; the Swift counterpart of Python's `ValueError`.
     case invalidArgument(message: String)
+    /// Credentials could not be loaded or are misconfigured: an unreadable, malformed or unsafe
+    /// profile or credentials file, an invalid profile name, a required environment variable that
+    /// is not set, or nothing to authenticate with at all. Thrown before any request is made. The
+    /// Swift counterpart of the reference SDKs' `CredentialsError`; a failed *token exchange* with
+    /// the server stays a ``responseValidation(message:body:)``, as upstream's `WorkloadIdentityError`.
+    case credentials(message: String)
+    /// The identity token file does not exist, is empty, is not UTF-8, or cannot be read. `path` is
+    /// the file that was tried when known, so a caller waiting for a projected token to appear can
+    /// retry without parsing the message. Counterpart of `IdentityTokenFileError`, which upstream
+    /// makes a subclass of `CredentialsError`; see ``isCredentialsError``.
+    case identityTokenFile(message: String, path: String?)
+
+    /// Whether this is one of the credential-loading failures upstream groups under
+    /// `CredentialsError` (``credentials(message:)`` and ``identityTokenFile(message:path:)``).
+    public var isCredentialsError: Bool {
+        switch self {
+        case .credentials, .identityTokenFile: return true
+        default: return false
+        }
+    }
 
     public static let defaultConnectionMessage = "Connection error."
     public static let defaultTimeoutMessage =
@@ -47,7 +67,8 @@ public enum AnthropicError: Error, Sendable {
              .overloaded(let detail), .deadlineExceeded(let detail), .internalServer(let detail),
              .apiStatus(let detail):
             return detail
-        case .connection, .timeout, .responseValidation, .webhookValidation, .invalidArgument:
+        case .connection, .timeout, .responseValidation, .webhookValidation, .invalidArgument,
+             .credentials, .identityTokenFile:
             return nil
         }
     }
@@ -133,6 +154,8 @@ extension AnthropicError: CustomStringConvertible {
         case .responseValidation(let message, _): return message
         case .webhookValidation(let message): return message
         case .invalidArgument(let message): return message
+        case .credentials(let message): return message
+        case .identityTokenFile(let message, _): return message
         default: return detail?.message ?? String(describing: self)
         }
     }

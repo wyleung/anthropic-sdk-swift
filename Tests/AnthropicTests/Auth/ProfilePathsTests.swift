@@ -9,32 +9,32 @@ final class ProfilePathsTests: XCTestCase {
     }
 
     func testValidateProfileNameRejectsEmpty() {
-        XCTAssertThrowsError(try ProfilePaths.validateProfileName(""))
+        XCTAssertThrowsCredentialsError(try ProfilePaths.validateProfileName(""))
     }
 
     func testValidateProfileNameRejectsLeadingWhitespace() {
-        XCTAssertThrowsError(try ProfilePaths.validateProfileName(" work"))
+        XCTAssertThrowsCredentialsError(try ProfilePaths.validateProfileName(" work"))
     }
 
     func testValidateProfileNameRejectsTrailingWhitespace() {
-        XCTAssertThrowsError(try ProfilePaths.validateProfileName("work "))
+        XCTAssertThrowsCredentialsError(try ProfilePaths.validateProfileName("work "))
     }
 
     func testValidateProfileNameRejectsLeadingDot() {
-        XCTAssertThrowsError(try ProfilePaths.validateProfileName(".work"))
-        XCTAssertThrowsError(try ProfilePaths.validateProfileName(".."))
+        XCTAssertThrowsCredentialsError(try ProfilePaths.validateProfileName(".work"))
+        XCTAssertThrowsCredentialsError(try ProfilePaths.validateProfileName(".."))
     }
 
     func testValidateProfileNameRejectsForwardSlash() {
-        XCTAssertThrowsError(try ProfilePaths.validateProfileName("a/b"))
+        XCTAssertThrowsCredentialsError(try ProfilePaths.validateProfileName("a/b"))
     }
 
     func testValidateProfileNameRejectsBackslash() {
-        XCTAssertThrowsError(try ProfilePaths.validateProfileName("a\\b"))
+        XCTAssertThrowsCredentialsError(try ProfilePaths.validateProfileName("a\\b"))
     }
 
     func testValidateProfileNameRejectsNUL() {
-        XCTAssertThrowsError(try ProfilePaths.validateProfileName("a\0b"))
+        XCTAssertThrowsCredentialsError(try ProfilePaths.validateProfileName("a\0b"))
     }
 
     // MARK: - activeProfile precedence
@@ -70,30 +70,34 @@ final class ProfilePathsTests: XCTestCase {
         XCTAssertEqual(try ProfilePaths.activeProfile(environment: environment), "default")
     }
 
-    // MARK: - hasExplicitActiveConfig
+    // MARK: - isActiveProfileUserConfigured
 
-    func testHasExplicitActiveConfigIsFalseWithNothingSet() {
-        // `ANTHROPIC_CONFIG_DIR` itself counts as explicit (see
-        // `testHasExplicitActiveConfigIsTrueForConfigDirEnvVar` below), so sandboxing this case
-        // still requires an environment with no override at all -- relying on this machine having no
-        // real `~/.config/anthropic/active_config` pointer file (verified absent).
-        XCTAssertFalse(ProfilePaths.hasExplicitActiveConfig(environment: [:]))
+    func testActiveProfileIsNotUserConfiguredWithNothingSet() {
+        // Relies on this machine having no real `~/.config/anthropic/active_config` pointer file
+        // (verified absent): with no `ANTHROPIC_CONFIG_DIR` there is no way to sandbox that lookup.
+        XCTAssertFalse(ProfilePaths.isActiveProfileUserConfigured(environment: [:]))
     }
 
-    func testHasExplicitActiveConfigIsTrueForProfileEnvVar() {
-        XCTAssertTrue(ProfilePaths.hasExplicitActiveConfig(environment: ["ANTHROPIC_PROFILE": "work"]))
+    func testProfileEnvVarAloneDoesNotMakeTheActiveProfileUserConfigured() {
+        // `ANTHROPIC_PROFILE` is explicit *selection*, handled by the chain ahead of workload identity;
+        // this predicate is only about whether a broken active profile should raise.
+        XCTAssertFalse(ProfilePaths.isActiveProfileUserConfigured(environment: ["ANTHROPIC_PROFILE": "work"]))
     }
 
-    func testHasExplicitActiveConfigIsTrueForConfigDirEnvVar() {
-        XCTAssertTrue(ProfilePaths.hasExplicitActiveConfig(environment: ["ANTHROPIC_CONFIG_DIR": "/tmp/anthropic"]))
+    func testConfigDirEnvVarMakesTheActiveProfileUserConfigured() {
+        XCTAssertTrue(ProfilePaths.isActiveProfileUserConfigured(environment: ["ANTHROPIC_CONFIG_DIR": "/tmp/anthropic"]))
     }
 
-    func testHasExplicitActiveConfigIsTrueForPointerFile() throws {
+    func testEmptyConfigDirEnvVarDoesNotCount() {
+        XCTAssertFalse(ProfilePaths.isActiveProfileUserConfigured(environment: ["ANTHROPIC_CONFIG_DIR": ""]))
+    }
+
+    func testPointerFileMakesTheActiveProfileUserConfigured() throws {
         let tempDir = Self.makeTempDir()
         defer { try? FileManager.default.removeItem(at: tempDir) }
         try Data("work".utf8).write(to: tempDir.appendingPathComponent("active_config"))
         let environment = ["ANTHROPIC_CONFIG_DIR": tempDir.path]
-        XCTAssertTrue(ProfilePaths.hasExplicitActiveConfig(environment: environment))
+        XCTAssertTrue(ProfilePaths.isActiveProfileUserConfigured(environment: environment))
     }
 
     // MARK: - requireHTTPS
@@ -109,7 +113,7 @@ final class ProfilePathsTests: XCTestCase {
     }
 
     func testRequireHTTPSRejectsPlainHTTP() {
-        XCTAssertThrowsError(try ProfilePaths.requireHTTPS("http://api.anthropic.com"))
+        XCTAssertThrowsCredentialsError(try ProfilePaths.requireHTTPS("http://api.anthropic.com"))
     }
 
     // MARK: - file path construction

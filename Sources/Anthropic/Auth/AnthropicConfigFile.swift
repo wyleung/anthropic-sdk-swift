@@ -43,8 +43,8 @@ struct AnthropicConfigFile: Sendable {
         try refuseIfWritableByGroupOrOthers(path)
         guard let data = try? Data(contentsOf: path) else { return nil }
         guard let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
-            throw AnthropicError.responseValidation(
-                message: "Config file at \(path.path) is not a valid JSON object.", body: nil
+            throw AnthropicError.credentials(
+                message: "Config file at \(path.path) is not a valid JSON object."
             )
         }
         return try parse(object, environment: environment)
@@ -61,21 +61,20 @@ struct AnthropicConfigFile: Sendable {
         guard path.path.withCString({ stat($0, &info) }) == 0 else { return }
         let permissionBits = info.st_mode & 0o7777
         guard permissionBits & 0o022 == 0 else {
-            throw AnthropicError.responseValidation(
+            throw AnthropicError.credentials(
                 message: "Config file at \(path.path) is writable by group or others (mode " +
-                    "0o\(String(permissionBits, radix: 8))); run `chmod go-w \(path.path)` before retrying.",
-                body: nil
+                    "0o\(String(permissionBits, radix: 8))); run `chmod go-w \(path.path)` before retrying."
             )
         }
     }
 
     private static func parse(_ object: [String: Any], environment: [String: String]) throws -> AnthropicConfigFile {
         guard let authObject = object["authentication"] as? [String: Any] else {
-            throw AnthropicError.responseValidation(message: "Config file is missing \"authentication\".", body: nil)
+            throw AnthropicError.credentials(message: "Config file is missing \"authentication\".")
         }
         guard let typeString = authObject["type"] as? String, let type = AuthenticationType(rawValue: typeString) else {
-            throw AnthropicError.responseValidation(
-                message: "Config file has an unrecognized authentication.type.", body: nil
+            throw AnthropicError.credentials(
+                message: "Config file has an unrecognized authentication.type."
             )
         }
 

@@ -33,13 +33,14 @@ final class AnthropicConfigFileTests: XCTestCase {
     func testLoadRefusesConfigFileWritableByGroup() throws {
         try writeConfig(minimalProfile, mode: 0o664)
         XCTAssertThrowsError(try AnthropicConfigFile.load(profile: "default", environment: environment)) { error in
+            XCTAssertEqual((error as? AnthropicError)?.isCredentialsError, true, "\(error)")
             XCTAssertTrue("\(error)".contains("writable by group or others"), "\(error)")
         }
     }
 
     func testLoadRefusesConfigFileWritableByOthers() throws {
         try writeConfig(minimalProfile, mode: 0o606)
-        XCTAssertThrowsError(try AnthropicConfigFile.load(profile: "default", environment: environment))
+        XCTAssertThrowsCredentialsError(try AnthropicConfigFile.load(profile: "default", environment: environment))
     }
 
     func testLoadAcceptsGroupAndWorldReadableConfigFileBecauseItHoldsNoSecrets() throws {
@@ -56,17 +57,17 @@ final class AnthropicConfigFileTests: XCTestCase {
 
     func testLoadThrowsWhenFileIsNotAJSONObject() throws {
         try writeConfig("not json")
-        XCTAssertThrowsError(try AnthropicConfigFile.load(profile: "default", environment: environment))
+        XCTAssertThrowsCredentialsError(try AnthropicConfigFile.load(profile: "default", environment: environment))
     }
 
     func testLoadThrowsWhenAuthenticationIsMissing() throws {
         try writeConfig(#"{"organization_id":"org-1"}"#)
-        XCTAssertThrowsError(try AnthropicConfigFile.load(profile: "default", environment: environment))
+        XCTAssertThrowsCredentialsError(try AnthropicConfigFile.load(profile: "default", environment: environment))
     }
 
     func testLoadThrowsOnUnrecognizedAuthenticationType() throws {
         try writeConfig(#"{"authentication":{"type":"something_else"}}"#)
-        XCTAssertThrowsError(try AnthropicConfigFile.load(profile: "default", environment: environment))
+        XCTAssertThrowsCredentialsError(try AnthropicConfigFile.load(profile: "default", environment: environment))
     }
 
     func testLoadParsesMinimalUserOAuthProfile() throws {
@@ -145,7 +146,7 @@ final class AnthropicConfigFileTests: XCTestCase {
 
     func testLoadThrowsWhenBaseURLIsPlainHTTP() throws {
         try writeConfig(#"{"authentication":{"type":"user_oauth","client_id":"client-1"},"base_url":"http://api.anthropic.com"}"#)
-        XCTAssertThrowsError(try AnthropicConfigFile.load(profile: "default", environment: environment))
+        XCTAssertThrowsCredentialsError(try AnthropicConfigFile.load(profile: "default", environment: environment))
     }
 
     func testLoadDoesNotValidatePresenceOfFederationRuleIdOrOrganizationId() throws {

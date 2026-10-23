@@ -75,18 +75,19 @@ final class CredentialsStoreTests: XCTestCase {
 
     func testReadThrowsOnWorldReadableFile() throws {
         try writeRawCredentialsFile(mode: 0o644)
-        XCTAssertThrowsError(try CredentialsStore.read(profile: "default", environment: environment))
+        XCTAssertThrowsCredentialsError(try CredentialsStore.read(profile: "default", environment: environment))
     }
 
     func testReadThrowsOnWorldReadableFileEvenWhenAlsoGroupReadable() throws {
         try writeRawCredentialsFile(mode: 0o664)
-        XCTAssertThrowsError(try CredentialsStore.read(profile: "default", environment: environment))
+        XCTAssertThrowsCredentialsError(try CredentialsStore.read(profile: "default", environment: environment))
     }
 
     func testReadThrowsOnGroupReadableFile() throws {
         // Python 1.5.0/1.10.0 tightened this from a stderr warning to a hard failure.
         try writeRawCredentialsFile(mode: 0o640)
         XCTAssertThrowsError(try CredentialsStore.read(profile: "default", environment: environment)) { error in
+            XCTAssertEqual((error as? AnthropicError)?.isCredentialsError, true, "\(error)")
             XCTAssertTrue("\(error)".contains("accessible by group or others"), "\(error)")
             XCTAssertTrue("\(error)".contains("chmod 600"), "\(error)")
         }
@@ -96,15 +97,15 @@ final class CredentialsStoreTests: XCTestCase {
         // The old check never looked at write bits at all.
         for mode in [0o620, 0o602, 0o660, 0o666, 0o610, 0o601] {
             try writeRawCredentialsFile(mode: mode)
-            XCTAssertThrowsError(
-                try CredentialsStore.read(profile: "default", environment: environment), "mode \(String(mode, radix: 8))"
+            XCTAssertThrowsCredentialsError(
+                try CredentialsStore.read(profile: "default", environment: environment)
             )
         }
     }
 
     func testStoreRefusesToMergeIntoAnExistingGroupAccessibleFile() throws {
         try writeRawCredentialsFile(mode: 0o640)
-        XCTAssertThrowsError(try CredentialsStore.store(
+        XCTAssertThrowsCredentialsError(try CredentialsStore.store(
             profile: "default", environment: environment, accessToken: "at-new", expiresAt: nil, refreshToken: nil
         ))
     }
@@ -124,7 +125,7 @@ final class CredentialsStoreTests: XCTestCase {
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: realFile.path)
         try FileManager.default.createSymbolicLink(at: credentialsPath, withDestinationURL: realFile)
 
-        XCTAssertThrowsError(try CredentialsStore.read(profile: "default", environment: environment))
+        XCTAssertThrowsCredentialsError(try CredentialsStore.read(profile: "default", environment: environment))
     }
 
     func testReadThrowsOnUnrecognizedType() throws {
@@ -133,7 +134,7 @@ final class CredentialsStoreTests: XCTestCase {
         )
         try Data(#"{"type":"something_else","access_token":"at-raw"}"#.utf8).write(to: credentialsPath)
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: credentialsPath.path)
-        XCTAssertThrowsError(try CredentialsStore.read(profile: "default", environment: environment))
+        XCTAssertThrowsCredentialsError(try CredentialsStore.read(profile: "default", environment: environment))
     }
 
     func testReadThrowsWhenAccessTokenIsMissing() throws {
@@ -142,7 +143,7 @@ final class CredentialsStoreTests: XCTestCase {
         )
         try Data(#"{"type":"oauth_token"}"#.utf8).write(to: credentialsPath)
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: credentialsPath.path)
-        XCTAssertThrowsError(try CredentialsStore.read(profile: "default", environment: environment))
+        XCTAssertThrowsCredentialsError(try CredentialsStore.read(profile: "default", environment: environment))
     }
 
     private func writeRawCredentialsFile(mode: Int) throws {

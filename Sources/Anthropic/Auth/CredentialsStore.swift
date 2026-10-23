@@ -33,8 +33,8 @@ enum CredentialsStore {
         try enforceSafety(statInfo, path: path)
         guard let data = try? Data(contentsOf: path) else { return nil }
         guard let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
-            throw AnthropicError.responseValidation(
-                message: "Credentials file at \(path.path) is not a valid JSON object.", body: nil
+            throw AnthropicError.credentials(
+                message: "Credentials file at \(path.path) is not a valid JSON object."
             )
         }
         return try parse(object, path: path)
@@ -67,13 +67,13 @@ enum CredentialsStore {
 
     private static func parse(_ object: [String: Any], path: URL) throws -> Credentials {
         if let typeValue = object["type"] as? String, typeValue != oauthTokenType {
-            throw AnthropicError.responseValidation(
-                message: "Credentials file at \(path.path) has unrecognized type \"\(typeValue)\".", body: nil
+            throw AnthropicError.credentials(
+                message: "Credentials file at \(path.path) has unrecognized type \"\(typeValue)\"."
             )
         }
         guard let accessToken = object["access_token"] as? String, !accessToken.isEmpty else {
-            throw AnthropicError.responseValidation(
-                message: "Credentials file at \(path.path) is missing access_token.", body: nil
+            throw AnthropicError.credentials(
+                message: "Credentials file at \(path.path) is missing access_token."
             )
         }
         let expiresAt = (object["expires_at"] as? NSNumber).map { Date(timeIntervalSince1970: $0.doubleValue) }
@@ -93,24 +93,23 @@ enum CredentialsStore {
         let result = url.path.withCString { lstat($0, &info) }
         if result == 0 { return info }
         if errno == ENOENT { return nil }
-        throw AnthropicError.responseValidation(
-            message: "Could not stat \(url.path): \(String(cString: strerror(errno)))", body: nil
+        throw AnthropicError.credentials(
+            message: "Could not stat \(url.path): \(String(cString: strerror(errno)))"
         )
     }
 
     private static func enforceSafety(_ info: stat, path: URL) throws {
         let fileType = info.st_mode & mode_t(S_IFMT)
         guard fileType != mode_t(S_IFLNK) else {
-            throw AnthropicError.responseValidation(
-                message: "Credentials file at \(path.path) is a symlink; refusing to read it.", body: nil
+            throw AnthropicError.credentials(
+                message: "Credentials file at \(path.path) is a symlink; refusing to read it."
             )
         }
         let permissionBits = info.st_mode & 0o7777
         guard permissionBits & 0o077 == 0 else {
-            throw AnthropicError.responseValidation(
+            throw AnthropicError.credentials(
                 message: "Credentials file at \(path.path) is accessible by group or others (mode " +
-                    "0o\(String(permissionBits, radix: 8))); run `chmod 600 \(path.path)` before retrying.",
-                body: nil
+                    "0o\(String(permissionBits, radix: 8))); run `chmod 600 \(path.path)` before retrying."
             )
         }
     }
@@ -138,9 +137,9 @@ enum CredentialsStore {
 
         let fd = tempPath.path.withCString { open($0, O_WRONLY | O_CREAT | O_EXCL, 0o600) }
         guard fd >= 0 else {
-            throw AnthropicError.responseValidation(
+            throw AnthropicError.credentials(
                 message: "Could not create temporary credentials file at \(tempPath.path): " +
-                    "\(String(cString: strerror(errno)))", body: nil
+                    "\(String(cString: strerror(errno)))"
             )
         }
         defer { close(fd) }
@@ -190,6 +189,6 @@ enum CredentialsStore {
     private static func storeCleanupError(_ prefix: String, tempPath: URL) -> AnthropicError {
         let message = "\(prefix): \(String(cString: strerror(errno)))"
         try? FileManager.default.removeItem(at: tempPath)
-        return .responseValidation(message: message, body: nil)
+        return .credentials(message: message)
     }
 }

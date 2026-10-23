@@ -120,6 +120,47 @@ final class TokenCacheTests: XCTestCase {
         XCTAssertEqual(finalCount, 1)
     }
 
+    /// A 401 invalidates the cache while a background refresh that started earlier is still running. That
+    /// refresh was not forced, so with an on-disk provider it may have re-read the very token the server
+    /// just rejected; caching it would make the retry (and every request after it) fail again.
+    func testRefreshAlreadyInFlightWhenTheCacheIsInvalidatedIsNotCached() async throws {
+        let cache = TokenCache()
+        _ = try await cache.token(provider: { _ in
+            AccessToken(accessToken: "old", expiresAt: Date().addingTimeInterval(100), refreshToken: nil)
+        })
+        let refreshStarted = Signal()
+        let releaseRefresh = Signal()
+        // Inside the advisory window: serves "old" and starts an unforced background refresh.
+        let started = try await cache.token(provider: { _ in
+            await refreshStarted.fire()
+            await releaseRefresh.wait()
+            return AccessToken(accessToken: "rejected", expiresAt: Date().addingTimeInterval(500), refreshToken: nil)
+        })
+        XCTAssertEqual(started.accessToken, "old")
+        await refreshStarted.wait()
+
+        await cache.invalidate()
+        await releaseRefresh.fire()
+
+        // Whichever way the race falls, a caller may be handed "rejected" once (by joining the in-flight
+        // refresh), but it must never be served from the cache afterwards.
+        let forced = Flags()
+        var served = AccessToken(accessToken: "", expiresAt: nil, refreshToken: nil)
+        let deadline = Date().addingTimeInterval(3)
+        repeat {
+            served = try await cache.token(provider: { force in
+                await forced.record(force)
+                return AccessToken(accessToken: "fresh", expiresAt: Date().addingTimeInterval(500), refreshToken: nil)
+            })
+            if served.accessToken == "fresh" { break }
+            try await Task.sleep(nanoseconds: 5_000_000)
+        } while Date() < deadline
+
+        XCTAssertEqual(served.accessToken, "fresh", "the rejected token was cached over the invalidation")
+        let forcedCalls = await forced.values
+        XCTAssertEqual(forcedCalls, [true], "the refresh after an invalidation must be forced")
+    }
+
     func testWaiterJoiningAFailedRefreshBecomesANewLeaderRatherThanPropagatingTheFailure() async throws {
         let cache = TokenCache()
         let counter = Counter()
@@ -191,6 +232,14 @@ private func tokenServedByCache(
     let strayCount = await strayProviderCalls.count
     XCTAssertEqual(strayCount, 0, "a second refresh was started while one was already in flight or stored", file: file, line: line)
     return served
+}
+
+private actor Flags {
+    private(set) var values: [Bool] = []
+
+    func record(_ value: Bool) {
+        values.append(value)
+    }
 }
 
 private actor Counter {
