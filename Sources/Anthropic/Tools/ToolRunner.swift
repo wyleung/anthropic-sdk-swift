@@ -72,8 +72,7 @@ public final class ToolRunner {
             }
             guard !toolUseBlocks.isEmpty else { break }
 
-            let assistantContent = try message.content.map { try $0.asRequestParam() }
-            let assistantMessage = MessageParam(role: .assistant, content: assistantContent)
+            let assistantMessage = try message.asRequestParam()
 
             let toolResults = await Self.executeToolUseBlocks(toolUseBlocks, toolsByName: toolsByName)
             var toolResultMessage = MessageParam(

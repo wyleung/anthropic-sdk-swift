@@ -15,135 +15,6 @@ private func jsonValue(encoding value: some Encodable) throws -> JSONValue {
     return try JSONDecoder().decode(JSONValue.self, from: data)
 }
 
-extension WebSearchToolResultContent {
-    fileprivate func asRequestParam() throws -> WebSearchToolResultBlockParamContentParam {
-        switch self {
-        case .results(let results):
-            return .results(results.map {
-                WebSearchResultBlockParam(
-                    title: $0.title, url: $0.url, encryptedContent: $0.encryptedContent, pageAge: $0.pageAge
-                )
-            })
-        case .error(let error):
-            return .error(WebSearchToolRequestErrorParam(errorCode: error.errorCode))
-        case .unknown:
-            throw BetaToolRunner.echoError(String(describing: Self.self))
-        }
-    }
-}
-
-extension DocumentSource {
-    fileprivate func asRequestParam() throws -> DocumentSourceParam {
-        switch self {
-        case .base64PDF(let source): return .base64PDF(Base64PDFSourceParam(data: source.data))
-        case .plainText(let source): return .plainText(PlainTextSourceParam(data: source.data))
-        case .unknown: throw BetaToolRunner.echoError(String(describing: Self.self))
-        }
-    }
-}
-
-extension DocumentBlock {
-    fileprivate func asRequestParam() throws -> DocumentBlockParam {
-        DocumentBlockParam(
-            source: try source.asRequestParam(),
-            citations: citations.map { CitationsConfigParam(enabled: $0.enabled) },
-            title: title
-        )
-    }
-}
-
-extension WebFetchToolResultContent {
-    fileprivate func asRequestParam() throws -> WebFetchToolResultBlockParamContentParam {
-        switch self {
-        case .result(let result):
-            return .result(WebFetchBlockParam(
-                url: result.url, content: try result.content.asRequestParam(), retrievedAt: result.retrievedAt
-            ))
-        case .error(let error):
-            return .error(WebFetchToolResultErrorBlockParam(errorCode: error.errorCode))
-        case .unknown:
-            throw BetaToolRunner.echoError(String(describing: Self.self))
-        }
-    }
-}
-
-extension CodeExecutionToolResultContent {
-    fileprivate func asRequestParam() throws -> CodeExecutionToolResultBlockParamContentParam {
-        switch self {
-        case .result(let result):
-            return .result(CodeExecutionResultBlockParam(
-                stdout: result.stdout, stderr: result.stderr, returnCode: result.returnCode,
-                content: result.content.map { CodeExecutionOutputBlockParam(fileId: $0.fileId) }
-            ))
-        case .encryptedResult(let result):
-            return .encryptedResult(EncryptedCodeExecutionResultBlockParam(
-                encryptedStdout: result.encryptedStdout, stderr: result.stderr, returnCode: result.returnCode,
-                content: result.content.map { CodeExecutionOutputBlockParam(fileId: $0.fileId) }
-            ))
-        case .error(let error):
-            return .error(CodeExecutionToolResultErrorParam(errorCode: error.errorCode))
-        case .unknown:
-            throw BetaToolRunner.echoError(String(describing: Self.self))
-        }
-    }
-}
-
-extension BashCodeExecutionToolResultContent {
-    fileprivate func asRequestParam() throws -> BashCodeExecutionToolResultBlockParamContentParam {
-        switch self {
-        case .result(let result):
-            return .result(BashCodeExecutionResultBlockParam(
-                stdout: result.stdout, stderr: result.stderr, returnCode: result.returnCode,
-                content: result.content.map { BashCodeExecutionOutputBlockParam(fileId: $0.fileId) }
-            ))
-        case .error(let error):
-            return .error(BashCodeExecutionToolResultErrorParam(errorCode: error.errorCode))
-        case .unknown:
-            throw BetaToolRunner.echoError(String(describing: Self.self))
-        }
-    }
-}
-
-extension TextEditorCodeExecutionToolResultContent {
-    fileprivate func asRequestParam() throws -> TextEditorCodeExecutionToolResultBlockParamContentParam {
-        switch self {
-        case .view(let result):
-            return .view(TextEditorCodeExecutionViewResultBlockParam(
-                content: result.content, fileType: result.fileType, numLines: result.numLines,
-                startLine: result.startLine, totalLines: result.totalLines
-            ))
-        case .create(let result):
-            return .create(TextEditorCodeExecutionCreateResultBlockParam(isFileUpdate: result.isFileUpdate))
-        case .strReplace(let result):
-            return .strReplace(TextEditorCodeExecutionStrReplaceResultBlockParam(
-                lines: result.lines, newLines: result.newLines, newStart: result.newStart,
-                oldLines: result.oldLines, oldStart: result.oldStart
-            ))
-        case .error(let error):
-            return .error(TextEditorCodeExecutionToolResultErrorParam(
-                errorCode: error.errorCode, errorMessage: error.errorMessage
-            ))
-        case .unknown:
-            throw BetaToolRunner.echoError(String(describing: Self.self))
-        }
-    }
-}
-
-extension ToolSearchToolResultContent {
-    fileprivate func asRequestParam() throws -> ToolSearchToolResultBlockParamContentParam {
-        switch self {
-        case .result(let result):
-            return .searchResult(ToolSearchToolSearchResultBlockParam(
-                toolReferences: result.toolReferences.map { ToolReferenceBlockParam(toolName: $0.toolName) }
-            ))
-        case .error(let error):
-            return .error(ToolSearchToolResultErrorParam(errorCode: error.errorCode, errorMessage: error.errorMessage))
-        case .unknown:
-            throw BetaToolRunner.echoError(String(describing: Self.self))
-        }
-    }
-}
-
 extension BetaMCPToolResultBlock.Content {
     fileprivate func asRequestParam() -> BetaRequestMCPToolResultBlockParam.Content {
         switch self {
@@ -156,14 +27,11 @@ extension BetaMCPToolResultBlock.Content {
 
 extension BetaContentBlock {
     /// Echoes an assistant response block back into the next request's message history, as
-    /// `BetaToolRunner`'s loop needs to do every iteration. Unlike GA's `ContentBlock.asRequestParam()`
-    /// -- which only covers the 5 block kinds a custom-tool-only conversation can produce, since
-    /// GA's `ToolRunner` never declares server tools -- `BetaToolUnionParam` lets a caller declare
-    /// server tools (web search, code execution, MCP toolsets, advisors, tool search) right alongside
-    /// custom ones, so a real Beta conversation's assistant turns can legitimately contain any of
-    /// these kinds. This covers all 17 typed cases plus `.unknown`; only the handful of inner
-    /// "unrecognized content shape" cases nested inside a *known* result-block type have no
-    /// request-side representation to fall back to and throw instead.
+    /// `BetaToolRunner`'s loop needs to do every iteration and ``BetaMessage/asRequestParam()`` does for
+    /// a whole turn. A real Beta conversation's assistant turns can contain any of the 17 typed kinds
+    /// (server tools, MCP, advisors, compaction, ...), plus `.unknown`, which is passed through raw. Only
+    /// an unrecognized shape nested inside a *known* result block has no request-side representation
+    /// and throws instead.
     func asRequestParam() throws -> BetaContentBlockParam {
         switch self {
         case .text(let block):

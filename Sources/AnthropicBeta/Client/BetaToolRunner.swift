@@ -98,8 +98,7 @@ public final class BetaToolRunner {
             }
             guard !toolUseBlocks.isEmpty else { break }
 
-            let assistantContent = try message.content.map { try $0.asRequestParam() }
-            let assistantMessage = BetaMessageParam(role: .assistant, content: assistantContent)
+            let assistantMessage = try message.asRequestParam()
 
             let available = availableToolNames()
             let toolResults = await Self.executeToolUseBlocks(
@@ -267,16 +266,5 @@ public final class BetaToolRunner {
                 isError: true
             )
         }
-    }
-
-    /// Shared with `BetaContentBlock.asRequestParam()`: thrown when an inner "unrecognized content
-    /// shape" case nested inside a known result-block type has no request-side representation to
-    /// echo back.
-    static func echoError(_ typeName: String) -> AnthropicError {
-        AnthropicError.responseValidation(
-            message: "BetaToolRunner can't echo an unrecognized \(typeName) case back into the next "
-                + "request -- the param-side union has no equivalent for it.",
-            body: nil
-        )
     }
 }
