@@ -6,12 +6,12 @@ This SDK is hand-ported from the official Python and TypeScript SDKs (see [CONTR
 
 | Reference SDK | Commit | Version | Synced |
 |---|---|---|---|
-| [anthropic-sdk-python](https://github.com/anthropics/anthropic-sdk-python) | `4474f31efa48588eff590f04419230791e22419f` | v1.0.0 | 2026-08-28 |
-| [anthropic-sdk-typescript](https://github.com/anthropics/anthropic-sdk-typescript) | `bfa9197f0182084941052be9752c948638421601` | v0.120.0 | 2026-08-28 |
+| [anthropic-sdk-python](https://github.com/anthropics/anthropic-sdk-python) | `9313f13a5a643ceed10fafba6785eab8e04b6e6e` | v2.1.0 | 2026-10-23 |
+| [anthropic-sdk-typescript](https://github.com/anthropics/anthropic-sdk-typescript) | `5badc765f17d373405f300ee8e69e7f490b1f172` | v1.1.0 | 2026-10-23 |
 
-## Sync in progress
+## Last sync
 
-Re-synced against upstream on 2026-10-22; the pin above stays put until the whole diff is ported or triaged out. Target: Python `9313f13a5a643ceed10fafba6785eab8e04b6e6e` (v2.1.0), TypeScript `5badc765f17d373405f300ee8e69e7f490b1f172` (v1.1.0).
+Re-synced on 2026-10-22/23 from Python `4474f31` (v1.0.0) / TypeScript `bfa9197` (v0.120.0) to the pin above. The record below is what was decided, ported, and deliberately left out, so the next sync does not re-litigate it.
 
 Decisions: adopt API version `2026-10-21` (a breaking upstream release: `anthropic-version` bump, API keys sent as `Authorization: Bearer`, one credential per client with new env precedence); keep Swift's single `MessageParam` + `Role` rather than upstream's per-role union (same JSON); the Admin/Organization API, Bedrock/Vertex/Foundry/AWS/Google Cloud clients, OpenTelemetry and the CLI stay out of scope.
 
@@ -30,7 +30,7 @@ Order of work, each milestone committed and pushed on its own:
    - `BetaFallbackBlockParam.from` becoming `Required`: arrived in a client refactor (Python 1.8.0) with no documented server requirement; left optional.
    - Vault MCP OAuth `expires_at`, event-type filters typed as enums: Swift already had the former; the latter are plain strings by the query-filter rule.
    - The whole Admin/Organization API (decided out of scope).
-4. **API version `2026-10-21`** — in progress, committed in steps.
+4. **API version `2026-10-21`** — done, committed in steps.
    - Done: the `anthropic-version` header, and API keys sent as `Authorization: Bearer` (`APIKeyProvider`). Along the way: the session runner's `environmentKey` never actually dropped a custom provider's `x-api-key` (assigning `nil` through a `[String: String?]` subscript removes the entry instead of marking the header unset); now `.some(nil)`, with a test.
    - Done: the credential chain. `ANTHROPIC_CONFIG_DIR` and the `active_config` pointer no longer count as explicit profile selection, so WIF env vars outrank them (only `ANTHROPIC_PROFILE` ranks above WIF; a broken profile still raises when the user configured the directory or pointer); an empty `ANTHROPIC_IDENTITY_TOKEN`/key/token variable counts as unset; `apiKey`/`authProvider`/`profile` are mutually exclusive (`resolvingCredentials` throws `.invalidArgument`; the non-throwing initializer reports it on the first request); `AnthropicError.credentials` and `.identityTokenFile(path:)` (+ `isCredentialsError`) replace the `.responseValidation` that credential-file failures used to be thrown as. `TokenCache` no longer caches an unforced refresh that overlapped `invalidate()` (upstream `_end_refresh`).
    - Found and fixed on the way, both predating this milestone: a credential provider's `anthropic-beta: oauth-2025-04-20` marker was overwritten by any Beta call's own `betas:` (upstream's `AccessTokenAuth` unions the flags), and request headers were layered in a case-sensitive dictionary, so a per-call `Authorization` could lose to the provider's. `RequestHeaders` now layers case-insensitively and merges beta flags.
@@ -40,7 +40,7 @@ Order of work, each milestone committed and pushed on its own:
    - Done: runtime tool changes and compaction on `BetaToolRunner`: `addTools` (function tools, or raw definitions for server tools), `removeTools`, `compactBeforeNextTurn`, plus `onCompaction` and a read-only `messages`. Changes act at once and go out as one `system` message of `tool_addition`/`tool_removal` blocks before the next request (held back across a `pause_turn`), without touching `tools`. Compaction sends a request stripped of the reply-shaping params, replaces the history with the signed block, waits out a paused turn, runs after the final turn, and is dropped if that turn left tool calls unanswered. State that can change mid-run lives in a locked `BetaToolRegistry`, since a tool body running in the task group may call these. Deliberately different from the iterator-based references: `run()` returns the last *turn* rather than a trailing compaction response (that one goes to `onCompaction`), and the "pending compaction skipped" and "compaction produced no summary" cases are silent (no logging layer).
    - Done: accepting tool objects directly (`ToolUnionParam(tool)` / `BetaToolUnionParam(tool)`): the same declaration the runners send, usable in `create`, `stream` and `countTokens`. Upstream's `to_dict()` helper-tag telemetry has no Swift counterpart.
    - Done: `runToolsEagerly` on `BetaToolRunner` (+ `deferToolCall`, the Swift form of `defer_tool_call()`): the reply is streamed and a call starts once the model has moved on from it (next block starts, or a `tool_use` turn ends; never at the call's own stop, never after a `fallback`). Calls run as concurrent tasks rather than one at a time as in the Python runner; results are reused, not rerun, and a started call in a turn that runs no tools is still awaited so nothing outlives `run()`. Compaction requests stream too in this mode.
-   - To do: re-verify that the Beta shapes ported in milestone 3 still decode once the version header changes; then move the pin below.
+   - Done: `clearAt` and `outputConfig` on a `system` `BetaMessageParam` (upstream's `BetaSystemMessageParam`), which a hand-written diff missed because the fields *moved* to a new class after the pin; `content` is left out of a system message that carries only an output config. Found by `Scripts/sync-audit.py` (below), which is how the Beta shapes from milestone 3 were re-verified: every field and class new at the target is either mentioned in the Swift sources or accounted for above. The shapes were not exercised against the live API.
 
 ## Checking for drift
 
@@ -48,12 +48,20 @@ From a local clone of each reference repo. The clones' `origin` is a personal fo
 
 ```sh
 cd anthropic-sdk-python && git fetch upstream --tags \
-  && git log --oneline 4474f31..upstream/main -- src/anthropic ':!src/anthropic/lib/bedrock' ':!src/anthropic/lib/vertex' ':!src/anthropic/lib/foundry' ':!src/anthropic/lib/aws' ':!src/anthropic/lib/google_cloud'
+  && git log --oneline 9313f13..upstream/main -- src/anthropic ':!src/anthropic/lib/bedrock' ':!src/anthropic/lib/vertex' ':!src/anthropic/lib/foundry' ':!src/anthropic/lib/aws' ':!src/anthropic/lib/google_cloud'
 cd anthropic-sdk-typescript && git fetch upstream --tags \
-  && git log --oneline bfa9197..upstream/main -- src
+  && git log --oneline 5badc76..upstream/main -- src
 ```
 
 Scope the paths to the whole source tree, not just `types/` and `resources/`: client behaviour that matters here (the `anthropic-version` constant, retry/backoff, streaming, credentials, tool runners) lives in `_constants.py`/`_base_client.py`/`lib/` (Python) and `client.ts`/`core/`/`lib/`/`tools/` (TypeScript), none of which a resources-only filter sees. The changelog (`git diff <pin> upstream/main -- CHANGELOG.md`) is the fastest way to triage before reading individual commits.
+
+Then run the audit, which checks every class, field, `Literal` value and resource method that is new at the target against the Swift sources. It exists because reading commits and changelogs misses things: a field that moves to a new class looks like noise there (`clear_at` did, after the first port of this sync).
+
+```sh
+python3 -I Scripts/sync-audit.py 9313f13 upstream/main ~/code/anthropic-sdk-python Sources
+```
+
+Treat the output as a checklist, not a verdict: classes Swift models under another name, beta flags (plain `[String]`), model ids (plain `String`) and the deliberately skipped typing overlays are expected noise, but a *field* with no Swift mention is almost always a real gap.
 
 Read through the resulting commits for anything relevant to this port: new endpoints, new/changed fields, new beta headers, renamed or removed types, new discriminated-union variants. Port whatever applies, following the workflow in [CONTRIBUTING.md](CONTRIBUTING.md), then update the pin table above to the new commit/version/date.
 
