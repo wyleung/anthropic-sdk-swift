@@ -167,7 +167,10 @@ public actor SessionToolRunner {
         if let environmentKey {
             var headers = options.headers
             headers["authorization"] = "Bearer \(environmentKey)"
-            headers["x-api-key"] = nil
+            // `.some(nil)`, not `nil`: assigning `nil` through a `[String: String?]` subscript removes
+            // the entry, which would leave the request still carrying a custom provider's `x-api-key`.
+            // (The built-in API key is `authorization` now, which the line above already replaces.)
+            headers["x-api-key"] = .some(nil)
             self.baseOptions = RequestOptions(headers: headers, maxRetries: options.maxRetries, timeout: options.timeout)
         } else {
             self.baseOptions = options

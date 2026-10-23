@@ -30,7 +30,9 @@ Order of work, each milestone committed and pushed on its own:
    - `BetaFallbackBlockParam.from` becoming `Required`: arrived in a client refactor (Python 1.8.0) with no documented server requirement; left optional.
    - Vault MCP OAuth `expires_at`, event-type filters typed as enums: Swift already had the former; the latter are plain strings by the query-filter rule.
    - The whole Admin/Organization API (decided out of scope).
-4. API version `2026-10-21`: header bump, Bearer API-key auth, new credential precedence (`CredentialsError`/`IdentityTokenFileError` equivalents), `Message`-to-param helper, and the tool-runner helper features -- `compact_before_next_turn`, immediate `add_tools`/`remove_tools` (inline tools, `inline-tools-2026-09-15`; the runner's availability fold already understands the wire side), `run_tools_eagerly`, accepting tool objects directly. Re-verify that the Beta shapes ported in milestone 3 still decode once the version header changes.
+4. **API version `2026-10-21`** — in progress, committed in steps.
+   - Done: the `anthropic-version` header, and API keys sent as `Authorization: Bearer` (`APIKeyProvider`). Along the way: the session runner's `environmentKey` never actually dropped a custom provider's `x-api-key` (assigning `nil` through a `[String: String?]` subscript removes the entry instead of marking the header unset); now `.some(nil)`, with a test.
+   - To do: new credential precedence (`ANTHROPIC_CONFIG_DIR`/`active_config` no longer count as explicit profile selection, so WIF env vars outrank them; explicit credential arguments mutually exclusive; `CredentialsError`/`IdentityTokenFileError` equivalents), `Message`-to-param helper, and the tool-runner helper features -- `compact_before_next_turn`, immediate `add_tools`/`remove_tools` (inline tools, `inline-tools-2026-09-15`; the runner's availability fold already understands the wire side), `run_tools_eagerly`, accepting tool objects directly. Re-verify that the Beta shapes ported in milestone 3 still decode once the version header changes.
 
 ## Checking for drift
 

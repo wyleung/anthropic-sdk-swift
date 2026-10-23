@@ -14,6 +14,9 @@ extension CredentialProvider {
     public func extraHeaders() async throws -> [String: String] { [:] }
 }
 
+/// An API key, sent as `Authorization: Bearer <key>` (API version `2026-10-21` onward; earlier
+/// versions used an `x-api-key` header). A key needs no token exchange, so unlike the OAuth-backed
+/// providers it adds no `anthropic-beta` marker.
 public struct APIKeyProvider: CredentialProvider {
     public let apiKey: String
 
@@ -22,7 +25,7 @@ public struct APIKeyProvider: CredentialProvider {
     }
 
     public func authHeader() async throws -> (name: String, value: String) {
-        ("x-api-key", apiKey)
+        ("authorization", "Bearer \(apiKey)")
     }
 
     public func invalidate() async {}

@@ -28,7 +28,12 @@ final class MessagesCountTokensTests: XCTestCase {
             captured.method = request.httpMethod
             captured.path = request.url?.path
             captured.query = request.url?.query
-            captured.headers = request.allHTTPHeaderFields ?? [:]
+            // Header names are case-insensitive and Foundation canonicalizes well-known ones
+            // (`Authorization`), so key by lowercase rather than by whatever casing it hands back.
+            captured.headers = Dictionary(
+                (request.allHTTPHeaderFields ?? [:]).map { ($0.key.lowercased(), $0.value) },
+                uniquingKeysWith: { first, _ in first }
+            )
             if let data = bodyData(from: request),
                let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
                 captured.body = object
@@ -53,7 +58,7 @@ final class MessagesCountTokensTests: XCTestCase {
         XCTAssertEqual(captured.method, "POST")
         XCTAssertEqual(captured.path, "/v1/messages/count_tokens")
         XCTAssertNil(captured.query, "GA count_tokens takes no beta query flag")
-        XCTAssertEqual(captured.headers["x-api-key"], "test-key")
+        XCTAssertEqual(captured.headers["authorization"], "Bearer test-key")
         XCTAssertEqual(captured.body["model"] as? String, "claude-opus-5-5")
         XCTAssertEqual((captured.body["messages"] as? [[String: Any]])?.first?["role"] as? String, "user")
     }

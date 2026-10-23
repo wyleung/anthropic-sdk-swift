@@ -49,8 +49,8 @@ final class CredentialChainTests: XCTestCase {
             environment: ["ANTHROPIC_API_KEY": "env-key"], urlSession: MockURLProtocol.makeSession()
         )
         let header = try await resolution.provider.authHeader()
-        XCTAssertEqual(header.name, "x-api-key")
-        XCTAssertEqual(header.value, "explicit-key")
+        XCTAssertEqual(header.name, "authorization")
+        XCTAssertEqual(header.value, "Bearer explicit-key")
         XCTAssertNil(resolution.baseURL)
     }
 
@@ -62,8 +62,8 @@ final class CredentialChainTests: XCTestCase {
             environment: ["ANTHROPIC_API_KEY": "env-key"], urlSession: MockURLProtocol.makeSession()
         )
         let header = try await resolution.provider.authHeader()
-        XCTAssertEqual(header.name, "x-api-key")
-        XCTAssertEqual(header.value, "env-key")
+        XCTAssertEqual(header.name, "authorization")
+        XCTAssertEqual(header.value, "Bearer env-key")
     }
 
     func testEnvironmentAuthTokenUsedWhenNoApiKeyIsSet() async throws {

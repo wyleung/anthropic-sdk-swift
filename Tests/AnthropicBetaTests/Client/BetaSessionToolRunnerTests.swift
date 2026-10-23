@@ -28,6 +28,42 @@ private final class Flag: @unchecked Sendable {
     var value = false
 }
 
+/// A provider that still authenticates with the pre-`2026-10-21` `x-api-key` header.
+private struct LegacyHeaderKeyProvider: CredentialProvider {
+    func authHeader() async throws -> (name: String, value: String) { ("x-api-key", "legacy-key") }
+    func invalidate() async {}
+}
+
+/// Records the auth-relevant headers of every request the runner makes (it issues them from
+/// concurrent tasks, so access is locked).
+private final class HeaderLog: @unchecked Sendable {
+    struct Seen {
+        let path: String
+        let authorization: String?
+        let apiKeyHeader: String?
+    }
+
+    private let lock = NSLock()
+    private var _requests: [Seen] = []
+
+    func record(_ request: URLRequest) {
+        let seen = Seen(
+            path: request.url?.path ?? "",
+            authorization: request.value(forHTTPHeaderField: "authorization"),
+            apiKeyHeader: request.value(forHTTPHeaderField: "x-api-key")
+        )
+        lock.lock()
+        _requests.append(seen)
+        lock.unlock()
+    }
+
+    var requests: [Seen] {
+        lock.lock()
+        defer { lock.unlock() }
+        return _requests
+    }
+}
+
 /// Routes mock responses by HTTP method and path across the three endpoints `SessionToolRunner`
 /// drives: GET `.../events/stream` (the live SSE connection), GET `.../events` (reconcile via
 /// `events.list`), and POST `.../events` (`events.send`). A `NSLock` guards the recorded POST
@@ -169,6 +205,76 @@ final class BetaSessionToolRunnerTests: XCTestCase {
         let events = try XCTUnwrap(sent["events"] as? [[String: Any]])
         XCTAssertEqual(events.first?["type"] as? String, "user.tool_result")
         XCTAssertEqual(events.first?["tool_use_id"] as? String, "toolu_1")
+    }
+
+    /// An API key is a Bearer token now (`authorization`), so the environment key replaces it by
+    /// overwriting the same header rather than by dropping a separate `x-api-key`. Every request the
+    /// runner makes -- the stream, the reconcile list and the result POST -- must carry only the
+    /// environment key.
+    func testEnvironmentKeyReplacesTheClientsOwnBearerApiKeyOnEveryRequest() async throws {
+        let router = SessionRouter(
+            listFixture: Self.emptyList,
+            streamFixture: Self.sse([
+                (
+                    "agent.tool_use",
+                    #"{"type":"agent.tool_use","id":"toolu_1","name":"echo","input":{},"processed_at":"2026-01-01T00:00:00Z","evaluated_permission":"allow"}"#
+                ),
+                ("session.status_terminated", #"{"id":"evt_end","processed_at":"2026-01-01T00:00:01Z"}"#),
+            ])
+        )
+        let seen = HeaderLog()
+        MockURLProtocol.responder = { request in
+            seen.record(request)
+            return try router.respond(to: request)
+        }
+        let client = AnthropicClient(apiKey: "parent-key", urlSession: MockURLProtocol.makeSession())
+        self.client = client
+        let runner = client.beta.sessions.events.toolRunner(
+            sessionId: "sess_1",
+            tools: [AnyAnthropicTool(ClosureTool(name: "echo") { _, _ in .text("ok") })],
+            maxIdle: nil,
+            environmentKey: "env-key"
+        )
+
+        _ = try await collectCalls(runner)
+
+        let requests = seen.requests
+        XCTAssertGreaterThanOrEqual(requests.count, 3, "stream, list and the result POST")
+        for request in requests {
+            XCTAssertEqual(request.authorization, "Bearer env-key", request.path)
+            XCTAssertNil(request.apiKeyHeader, request.path)
+        }
+    }
+
+    /// A custom provider may still authenticate with `x-api-key`; the environment key must drop it
+    /// too, not send both credentials (assigning `nil` through the `[String: String?]` subscript
+    /// removes the entry instead of marking the header unset, which is how it used to leak).
+    func testEnvironmentKeyAlsoDropsACustomProvidersXApiKeyHeader() async throws {
+        let router = SessionRouter(
+            listFixture: Self.emptyList,
+            streamFixture: Self.sse([
+                ("session.status_terminated", #"{"id":"evt_end","processed_at":"2026-01-01T00:00:01Z"}"#),
+            ])
+        )
+        let seen = HeaderLog()
+        MockURLProtocol.responder = { request in
+            seen.record(request)
+            return try router.respond(to: request)
+        }
+        let client = AnthropicClient(authProvider: LegacyHeaderKeyProvider(), urlSession: MockURLProtocol.makeSession())
+        self.client = client
+        let runner = client.beta.sessions.events.toolRunner(
+            sessionId: "sess_1", tools: [], maxIdle: nil, environmentKey: "env-key"
+        )
+
+        _ = try await collectCalls(runner)
+
+        let requests = seen.requests
+        XCTAssertFalse(requests.isEmpty)
+        for request in requests {
+            XCTAssertEqual(request.authorization, "Bearer env-key", request.path)
+            XCTAssertNil(request.apiKeyHeader, request.path)
+        }
     }
 
     func testDeniedPermissionShortCircuitsWithoutDispatching() async throws {

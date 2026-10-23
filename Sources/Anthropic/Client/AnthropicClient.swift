@@ -2,7 +2,10 @@ import Foundation
 
 public final class AnthropicClient: Sendable {
     public static let defaultBaseURL = URL(string: "https://api.anthropic.com")!
-    public static let defaultAnthropicVersion = "2023-06-01"
+    /// The `anthropic-version` header every request sends. `2026-10-21` is the API version the
+    /// reference SDKs moved to in their 2.0 / 1.0 releases; an API key now travels as
+    /// `Authorization: Bearer <key>` rather than `x-api-key`.
+    public static let defaultAnthropicVersion = "2026-10-21"
 
     let baseURL: URL
     let defaultHeaders: [String: String]

@@ -28,7 +28,9 @@ final class MessagesCreateTests: XCTestCase {
 
         MockURLProtocol.responder = { request in
             XCTAssertEqual(request.url?.path, "/v1/messages")
-            XCTAssertEqual(request.value(forHTTPHeaderField: "x-api-key"), "test-key")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "authorization"), "Bearer test-key")
+            XCTAssertNil(request.value(forHTTPHeaderField: "x-api-key"), "API keys travel as a Bearer token now")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "anthropic-version"), "2026-10-21")
             let response = HTTPURLResponse(
                 url: request.url!,
                 statusCode: 200,
